@@ -10,6 +10,7 @@ struct settings
   int tab_space;
   bool show_all_characters;
   int w, h;
+  int command_buffer_rows;
   };
 
 settings read_settings(const char* filename);

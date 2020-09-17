@@ -11,6 +11,7 @@ settings::settings()
   use_spaces_for_tab = true;
   w = 80;
   h = 25;
+  command_buffer_rows = 1;
   }
 
 settings read_settings(const char* filename)
@@ -23,6 +24,7 @@ settings read_settings(const char* filename)
   f["show_all_characters"] >> s.show_all_characters;
   f["width"] >> s.w;
   f["height"] >> s.h;
+  f["command_buffer_rows"] >> s.command_buffer_rows;
   f.release();
   return s;
   }
@@ -35,5 +37,6 @@ void write_settings(const settings& s, const char* filename)
   f << "show_all_characters" << s.show_all_characters;
   f << "width" << s.w;
   f << "height" << s.h;
+  f << "command_buffer_rows" << s.command_buffer_rows;
   f.release();
   }

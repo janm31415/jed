@@ -42,5 +42,6 @@ void init_colors()
   init_color(26, multiline_tag_color_bold);
 
   init_pair(default_color, 16, 17);
+  init_pair(command_color, 17, 16);
   init_pair(multiline_tag, 18, 17);
   }
