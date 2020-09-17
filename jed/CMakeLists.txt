@@ -28,6 +28,9 @@ clipboard.h
 colors.h
 engine.h
 keyboard.h
+pref_file.h
+settings.h
+utils.h
     )
 	
 set(SRCS
@@ -37,8 +40,14 @@ colors.cpp
 engine.cpp
 keyboard.cpp
 main.cpp
+pref_file.cpp
+settings.cpp
+utils.cpp
 )
 
+set(JSON
+${CMAKE_CURRENT_SOURCE_DIR}/../json/json.hpp
+)
 
 if (WIN32)
 set(CMAKE_C_FLAGS_DEBUG "/W4 /MP /GF /RTCu /Od /MDd /Zi")
@@ -59,7 +68,7 @@ add_definitions(-DPDC_FORCE_UTF8)
 add_definitions(-DPDC_WIDE)
 
 if (WIN32)
-add_executable(jed WIN32 ${HDRS} ${SRCS})
+add_executable(jed WIN32 ${HDRS} ${SRCS} ${JSON})
 endif (WIN32)
 
 if (UNIX)
@@ -74,6 +83,7 @@ source_group("ThirdParty/json" FILES ${JSON})
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../
     ${CMAKE_CURRENT_SOURCE_DIR}/../cpp-rrb/
+    ${CMAKE_CURRENT_SOURCE_DIR}/../json/
     ${CMAKE_CURRENT_SOURCE_DIR}/../jtk/
     ${CMAKE_CURRENT_SOURCE_DIR}/../pdcurses/     
     ${SDL_INCLUDE_DIR}

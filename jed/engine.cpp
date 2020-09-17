@@ -1260,7 +1260,7 @@ std::optional<app_state> process_input(app_state state)
     }
   }
 
-engine::engine(int argc, char** argv)
+engine::engine(int argc, char** argv, const settings& input_settings) : s(input_settings)
   {
   pdc_font_size = 17;
 #ifdef _WIN32

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "engine.h"
+#include "utils.h"
 
 extern "C"
   {
@@ -43,9 +44,13 @@ int main(int argc, char** argv)
 
   PDC_set_title("jed");
 
-  engine e(argc, argv);
+  settings s;
+  s = read_settings(get_file_in_executable_path("jed_settings.json").c_str());
+
+  engine e(argc, argv, s);
   e.run();
 
+  write_settings(e.s, get_file_in_executable_path("jed_settings.json").c_str());
 
   endwin();
 

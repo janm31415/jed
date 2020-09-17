@@ -1,6 +1,7 @@
 #pragma once
 
 #include "buffer.h"
+#include "settings.h"
 #include <string>
 #include <vector>
 
@@ -30,8 +31,9 @@ struct app_state
 struct engine
   {
   app_state state;
+  settings s;
 
-  engine(int argc, char** argv);
+  engine(int argc, char** argv, const settings& input_settings);
   ~engine();
 
   void run();
