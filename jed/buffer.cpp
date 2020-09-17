@@ -422,3 +422,81 @@ file_buffer select_all(file_buffer fb)
   fb.pos.col = fb.content.back().size();
   return fb;
   }
+
+file_buffer move_left(file_buffer fb)
+  {
+  if (fb.content.empty())
+    return fb;
+  position actual = get_actual_position(fb);
+  if (actual.col == 0)
+    {
+    if (fb.pos.row > 0)
+      {
+      --fb.pos.row;
+      fb.pos.col = fb.content[fb.pos.row].size();
+      }
+    }
+  else
+    fb.pos.col = actual.col - 1;
+  return fb;
+  }
+
+file_buffer move_right(file_buffer fb)
+  {
+  if (fb.content.empty())
+    return fb;
+  if (fb.pos.col < (int64_t)fb.content[fb.pos.row].size() - 1)
+    ++fb.pos.col;
+  else if ((fb.pos.row + 1) < fb.content.size())
+    {
+    fb.pos.col = 0;
+    ++fb.pos.row;
+    }
+  else if (fb.pos.col == (int64_t)fb.content[fb.pos.row].size() - 1)
+    {
+    ++fb.pos.col;
+    assert(fb.pos.row == fb.content.size() - 1);
+    assert(fb.pos.col == fb.content.back().size());
+    }
+  return fb;
+  }
+
+file_buffer move_up(file_buffer fb)
+  {
+  if (fb.pos.row > 0)
+    --fb.pos.row;
+  return fb;
+  }
+
+file_buffer move_down(file_buffer fb)
+  {
+  if ((fb.pos.row + 1) < fb.content.size())
+    {
+    ++fb.pos.row;
+    }
+  return fb;
+  }
+
+file_buffer move_home(file_buffer fb)
+  {
+  fb.pos.col = 0;
+  return fb;
+  }
+
+file_buffer move_end(file_buffer fb)
+  {
+  if (fb.content.empty())
+    return fb;
+
+  fb.pos.col = (int64_t)fb.content[fb.pos.row].size() - 1;
+  if (fb.pos.col < 0)
+    fb.pos.col = 0;
+
+  if ((fb.pos.row + 1) == fb.content.size()) // last line
+    {
+    if (fb.content.back().back() != L'\n')
+      ++fb.pos.col;
+    }
+
+  return fb;
+  }

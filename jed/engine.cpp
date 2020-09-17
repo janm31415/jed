@@ -15,8 +15,6 @@ extern "C"
 #include <sdl2/pdcsdl.h>
   }
 
-#define TAB_SPACE 8
-
 
 #define DEFAULT_COLOR (A_NORMAL | COLOR_PAIR(default_color))
 
@@ -31,24 +29,47 @@ void get_editor_window_size(int& rows, int& cols)
   rows -= 4;
   }
 
-uint32_t character_width(uint32_t character, int64_t col)
+uint32_t character_width(uint32_t character, int64_t col, const settings& s)
   {
   switch (character)
     {
-    case 9: return TAB_SPACE - (col % TAB_SPACE);
+    case 9: return s.tab_space - (col % s.tab_space);
+    case 10: return s.show_all_characters ? 2 : 1;
+    case 13: return s.show_all_characters ? 2 : 1;
     default: return 1;
     }
   }
 
-uint16_t character_to_pdc_char(uint32_t character, uint32_t char_id)
+uint16_t character_to_pdc_char(uint32_t character, uint32_t char_id, const settings& s)
   {
   if (character > 65535)
     return '?';
   switch (character)
     {
-    case 9: return 32;     
-    case 10: return 32; 
-    case 13: return 32;    
+    case 9:
+    {
+    if (s.show_all_characters)
+      {
+      switch (char_id)
+        {
+        case 0: return 84; break;
+        case 1: return 66; break;
+        default: return 32; break;
+        }
+      }
+    return 32; break;
+    }
+    case 10: {
+    if (s.show_all_characters)
+      return char_id == 0 ? 76 : 70;
+    return 32; break;
+    }
+    case 13: {
+    if (s.show_all_characters)
+      return char_id == 0 ? 67 : 82;
+    return 32; break;
+    }
+    case 32: return s.show_all_characters ? 46 : 32; break;
     default: return (uint16_t)character;
     }
   }
@@ -113,11 +134,11 @@ void draw_title_bar(app_state state)
 
 #define MULTILINEOFFSET 10
 
-void draw_line(line ln, position& current, position cursor, std::vector<chtype>& attribute_stack, int r, int xoffset, int maxcol, std::optional<position> start_selection)
+void draw_line(line ln, position& current, position cursor, std::vector<chtype>& attribute_stack, int r, int xoffset, int maxcol, std::optional<position> start_selection, const settings& s)
   {
   bool has_selection = start_selection != std::nullopt;
   bool multiline = (cursor.row == current.row) && (ln.size() >= (maxcol - 1));
-  
+
   auto it = ln.begin();
   auto it_end = ln.end();
 
@@ -125,7 +146,7 @@ void draw_line(line ln, position& current, position cursor, std::vector<chtype>&
 
   if (multiline)
     {
-    int pagewidth = maxcol-2 - MULTILINEOFFSET;
+    int pagewidth = maxcol - 2 - MULTILINEOFFSET;
     page = cursor.col / pagewidth;
     if (page != 0)
       {
@@ -139,7 +160,7 @@ void draw_line(line ln, position& current, position cursor, std::vector<chtype>&
       addch('$');
       attron(COLOR_PAIR(default_color));
       ++xoffset;
-      }    
+      }
     }
 
   for (; it != it_end; ++it)
@@ -164,10 +185,10 @@ void draw_line(line ln, position& current, position cursor, std::vector<chtype>&
 
     move((int)r, (int)current.col + xoffset);
     auto character = *it;
-    uint32_t cwidth = character_width(character, current.col);
+    uint32_t cwidth = character_width(character, current.col, s);
     for (uint32_t cnt = 0; cnt < cwidth; ++cnt)
       {
-      addch(character_to_pdc_char(character, cnt));
+      addch(character_to_pdc_char(character, cnt, s));
       }
 
     if (current == cursor)
@@ -235,7 +256,7 @@ void draw_help_text(app_state state)
   if (state.operation == op_editing)
     {
     static std::string line1("^N New    ^O Open   ^S Save   ^C Copy   ^V Paste  ^Z Undo   ^Y Redo   ^A Sel/all");
-    static std::string line2("^H Help   ^X Exit   ^B Build  ^P Play   ^R Restart^E Export");
+    static std::string line2("^H Help   ^X Exit");
     draw_help_line(line1, rows - 2, cols);
     draw_help_line(line2, rows - 1, cols);
     }
@@ -261,7 +282,7 @@ void draw_help_text(app_state state)
     }
   }
 
-void draw_buffer(file_buffer fb, int64_t scroll_row)
+void draw_buffer(file_buffer fb, int64_t scroll_row, const settings& s)
   {
   int offset_x = 0;
   int offset_y = 1;
@@ -302,7 +323,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row)
       }
 
 
-    draw_line(fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection);
+    draw_line(fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection, s);
 
     if ((current == cursor))// && (current.row == fb.content.size() - 1) && (current.col == fb.content.back().size()))// only occurs on last line, last position
       {
@@ -318,20 +339,20 @@ void draw_buffer(file_buffer fb, int64_t scroll_row)
     }
   }
 
-app_state draw(app_state state)
+app_state draw(app_state state, const settings& s)
   {
-  erase();  
+  erase();
 
-  draw_title_bar(state);  
+  draw_title_bar(state);
 
   if (state.operation == op_help)
     {
     state.operation_buffer.pos.col = -1;
     state.operation_buffer.pos.row = -1;
-    draw_buffer(state.operation_buffer, state.operation_scroll_row);
+    draw_buffer(state.operation_buffer, state.operation_scroll_row, s);
     }
   else
-    draw_buffer(state.buffer, state.scroll_row);
+    draw_buffer(state.buffer, state.scroll_row, s);
 
   if (state.operation != op_editing && state.operation != op_help)
     {
@@ -355,7 +376,7 @@ app_state draw(app_state state)
     int cols_available = maxcol - txt.length();
     int off_x = txt.length();
     if (!state.operation_buffer.content.empty())
-      draw_line(state.operation_buffer.content[0], current, cursor, attribute_stack, rows-3, off_x, cols_available, state.operation_buffer.start_selection);
+      draw_line(state.operation_buffer.content[0], current, cursor, attribute_stack, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, s);
     if ((current == cursor))
       {
       move((int)rows - 3, (int)current.col + off_x);
@@ -364,7 +385,7 @@ app_state draw(app_state state)
       attroff(A_REVERSE);
       }
     attroff(attribute_stack.back());
-    attribute_stack.pop_back();    
+    attribute_stack.pop_back();
     }
   else
     {
@@ -635,7 +656,7 @@ app_state move_page_down_operation(app_state state)
   state = cancel_selection(state);
   int rows, cols;
   get_editor_window_size(rows, cols);
-  state.operation_scroll_row += rows - 1;  
+  state.operation_scroll_row += rows - 1;
   return check_operation_scroll_position(state);
   }
 
@@ -786,7 +807,7 @@ line string_to_line(const std::string& txt)
   line out;
   auto trans = out.transient();
   for (auto ch : txt)
-    trans.push_back(ch);  
+    trans.push_back(ch);
   return trans.persistent();
   }
 
@@ -805,7 +826,7 @@ std::string clean_filename(std::string name)
   }
 
 app_state open_file(app_state state)
-  {  
+  {
   std::wstring wfilename;
   if (!state.operation_buffer.content.empty())
     wfilename = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
@@ -841,7 +862,7 @@ app_state open_file(app_state state)
   }
 
 app_state save_file(app_state state)
-  {  
+  {
   std::wstring wfilename;
   if (!state.operation_buffer.content.empty())
     wfilename = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
@@ -851,7 +872,7 @@ app_state save_file(app_state state)
     {
     filename.push_back('"');
     filename.insert(filename.begin(), '"');
-    }  
+    }
   bool success = false;
   state.buffer = save_to_file(success, state.buffer, filename);
   if (success)
@@ -882,7 +903,7 @@ app_state make_new_buffer(app_state state)
   }
 
 std::optional<app_state> ret_operation(app_state state)
-  {  
+  {
   bool done = false;
   while (!done)
     {
@@ -1095,7 +1116,11 @@ std::optional<app_state> process_input(app_state state)
           {
           auto new_w = event.window.data1;
           auto new_h = event.window.data2;
-          resize_term(new_h / font_height, new_w / font_width);
+          state.w = (new_w/font_width) * font_width;
+          state.h = (new_h/font_height) * font_height;
+          if (state.w != new_w || state.h != new_h)
+            SDL_SetWindowSize(pdc_window, state.w, state.h);
+          resize_term(state.h / font_height, state.w / font_width);
           return state;
           }
         break;
@@ -1166,7 +1191,7 @@ std::optional<app_state> process_input(app_state state)
             switch (state.operation)
               {
               case op_query_save:
-              {              
+              {
               state.operation = state.operation_stack.back();
               state.operation_stack.pop_back();
               return ret(state);
@@ -1178,7 +1203,7 @@ std::optional<app_state> process_input(app_state state)
           }
           case SDLK_o:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL)) 
+          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
             state.operation = op_open;
             return clear_operation_buffer(state);
@@ -1209,13 +1234,13 @@ std::optional<app_state> process_input(app_state state)
           }
           case SDLK_y:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL)) 
+          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
             switch (state.operation)
               {
               case op_query_save:
               {
-              state.operation = op_save;              
+              state.operation = op_save;
               return ret(state);
               }
               default: return redo(state);
@@ -1225,7 +1250,7 @@ std::optional<app_state> process_input(app_state state)
           }
           case SDLK_z:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL)) 
+          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
             return undo(state);
             }
@@ -1279,8 +1304,8 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   pdc_fwidth = font_width;
   pdc_fthick = pdc_font_size / 20 + 1;
 
-  int w = font_width*80;
-  int h = font_height*25;
+  state.w = s.w * font_width;
+  state.h = s.h * font_height;
 
   nodelay(stdscr, TRUE);
   noecho();
@@ -1299,14 +1324,14 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   state.operation_scroll_row = 0;
 
   SDL_ShowCursor(1);
-  SDL_SetWindowSize(pdc_window, w, h);
+  SDL_SetWindowSize(pdc_window, state.w, state.h);
 
   SDL_DisplayMode DM;
   SDL_GetCurrentDisplayMode(0, &DM);
 
-  SDL_SetWindowPosition(pdc_window, (DM.w - w) / 2, (DM.h - h) / 2);
+  SDL_SetWindowPosition(pdc_window, (DM.w - state.w) / 2, (DM.h - state.h) / 2);
 
-  resize_term(h / font_height, w / font_width);
+  resize_term(state.h / font_height, state.w / font_width);
 
   }
 
@@ -1317,14 +1342,17 @@ engine::~engine()
 
 void engine::run()
   {
-  state = draw(state);
+  state = draw(state, s);
   SDL_UpdateWindowSurface(pdc_window);
 
   while (auto new_state = process_input(state))
     {
     state = *new_state;
-    state = draw(state);
+    state = draw(state, s);
 
     SDL_UpdateWindowSurface(pdc_window);
     }
+
+  s.w = state.w / font_width;
+  s.h = state.h / font_height;
   }

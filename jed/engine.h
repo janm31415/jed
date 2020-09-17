@@ -25,6 +25,7 @@ struct app_state
   int64_t scroll_row, operation_scroll_row;    
   e_operation operation;  
   std::vector<e_operation> operation_stack;
+  int w, h;
   };
 
 

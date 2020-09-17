@@ -79,3 +79,15 @@ file_buffer undo(file_buffer fb);
 file_buffer redo(file_buffer fb);
 
 file_buffer select_all(file_buffer fb);
+
+file_buffer move_left(file_buffer fb);
+
+file_buffer move_right(file_buffer fb);
+
+file_buffer move_up(file_buffer fb);
+
+file_buffer move_down(file_buffer fb);
+
+file_buffer move_home(file_buffer fb);
+
+file_buffer move_end(file_buffer fb);
