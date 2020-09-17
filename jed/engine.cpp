@@ -184,7 +184,7 @@ void draw_line(int& wide_characters_offset, line ln, position& current, position
       attron(A_REVERSE);
       }
 
-    move((int)r, (int)current.col + wide_characters_offset);
+    move((int)r, (int)current.col + xoffset + wide_characters_offset);
     auto character = *it;
     uint32_t cwidth = character_width(character, current.col + wide_characters_offset, s);
     for (uint32_t cnt = 0; cnt < cwidth; ++cnt)
