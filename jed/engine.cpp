@@ -189,13 +189,35 @@ void draw_title_bar(app_state state)
 
 #define MULTILINEOFFSET 10
 
+
+bool in_selection(position current, position cursor, std::optional<position> start_selection, bool rectangular)
+  {
+  bool has_selection = start_selection != std::nullopt;
+  if (has_selection)
+    {
+    if (!rectangular)
+      return ((start_selection <= current && current <= cursor) || (cursor <= current && current <= start_selection));
+
+    int64_t mincol = start_selection->col;
+    int64_t minrow = start_selection->row;
+    int64_t maxcol = cursor.col;
+    int64_t maxrow = cursor.row;
+    if (maxcol < mincol)
+      std::swap(maxcol, mincol);
+    if (maxrow < minrow)
+      std::swap(maxrow, minrow);
+    return (minrow <= current.row && current.row <= maxrow && mincol <= current.col && current.col <= maxcol);
+    }
+  return false;
+  }
+
 /*
 Returns an x offset (let's call it multiline_offset_x) such that
   int x = (int)current.col + multiline_offset_x + wide_characters_offset;
 equals the x position in the screen of where the next character should come.
 This makes it possible to further fill the line with spaces after calling "draw_line".
 */
-int draw_line(int& wide_characters_offset, line ln, position& current, position cursor, std::vector<chtype>& attribute_stack, int r, int xoffset, int maxcol, std::optional<position> start_selection, screen_ex_type set_type, const settings& s)
+int draw_line(int& wide_characters_offset, line ln, position& current, position cursor, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, screen_ex_type set_type, const settings& s)
   {
   int multiline_tag = (int)multiline_tag_editor;
   if (set_type == SET_TEXT_COMMAND)
@@ -225,28 +247,24 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
       attron(COLOR_PAIR(multiline_tag));
       add_ex(position(), SET_NONE);
       addch('$');
-      attron(attribute_stack.front());
+      attron(base_color);
       ++xoffset;
       }
     }
+
 
   for (; it != it_end; ++it)
     {
     if (current.col >= maxcol)
       break;
 
+    if (in_selection(current, cursor, start_selection, rectangular))
+      attron(A_REVERSE);
+    else
+      attroff(A_REVERSE);
+
     if (current == cursor)
       {
-      attribute_stack.push_back(A_REVERSE);
-      if (has_selection && (cursor < start_selection))
-        {
-        attribute_stack.push_back(A_REVERSE);
-        }
-      attron(A_REVERSE);
-      }
-    if (has_selection && (current == start_selection) && (start_selection < cursor))
-      {
-      attribute_stack.push_back(A_REVERSE);
       attron(A_REVERSE);
       }
 
@@ -260,33 +278,19 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
       }
     wide_characters_offset += cwidth - 1;
 
-    if (current == cursor)
-      {
-      attroff(attribute_stack.back());
-      attribute_stack.pop_back();
-      if (has_selection && (start_selection < cursor))
-        {
-        attroff(attribute_stack.back());
-        attribute_stack.pop_back();
-        }
-      attron(attribute_stack.back());
-      }
-    if (has_selection && (current == start_selection) && (cursor < start_selection) && (attribute_stack.size() >= 2))
-      {
-      attroff(attribute_stack.back());
-      attribute_stack.pop_back();
-      attron(attribute_stack.back());
-      }
-
     ++current.col;
     }
 
+  if (!in_selection(current, cursor, start_selection, rectangular))
+    attroff(A_REVERSE);
+
   if (multiline && (it != it_end) && (page != 0))
     {
+    attroff(A_REVERSE);
     attron(COLOR_PAIR(multiline_tag));
     add_ex(position(), SET_NONE);
     addch('$');
-    attron(attribute_stack.front());
+    attron(base_color);
     ++xoffset;
     }
 
@@ -383,16 +387,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
 
   bool has_selection = fb.start_selection != std::nullopt;
 
-  std::vector<chtype> attribute_stack;
-
   attrset(COMMAND_COLOR);
-  attribute_stack.push_back(COMMAND_COLOR);
-
-  if (has_selection && fb.start_selection->row < scroll_row)
-    {
-    attron(A_REVERSE);
-    attribute_stack.push_back(A_REVERSE);
-    }
 
   for (int r = 0; r < maxrow; ++r)
     {
@@ -415,10 +410,11 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
         attroff(A_REVERSE);
         ++x;
         }
+      auto last_pos = get_last_position(fb);
       for (; x < maxcol; ++x)
         {
         move((int)r + offset_y, (int)x + offset_x);
-        add_ex(get_last_position(fb), SET_TEXT_COMMAND);
+        add_ex(last_pos, SET_TEXT_COMMAND);
         addch(' ');
         }
       ++current.row;
@@ -426,7 +422,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection, SET_TEXT_COMMAND, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, SET_TEXT_COMMAND, s);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
@@ -471,16 +467,13 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
 
   bool has_selection = fb.start_selection != std::nullopt;
 
-  std::vector<chtype> attribute_stack;
 
   attrset(DEFAULT_COLOR);
-  attribute_stack.push_back(DEFAULT_COLOR);
 
-  if (has_selection && fb.start_selection->row < scroll_row)
-    {
-    attron(A_REVERSE);
-    attribute_stack.push_back(A_REVERSE);
-    }
+  //if (has_selection && fb.start_selection->row < scroll_row)
+  //  {
+  //  attron(A_REVERSE);
+  //  }
 
   int r = 0;
   for (; r < maxrow; ++r)
@@ -500,7 +493,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection, set_type, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, set_type, s);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
@@ -525,10 +518,11 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
     ++current.row;
     }
 
+  auto last_pos = get_last_position(fb);
   for (; r < maxrow; ++r)
     {
     move((int)r + offset_y, offset_x);
-    add_ex(get_last_position(fb), set_type);
+    add_ex(last_pos, set_type);
     }
   }
 
@@ -618,12 +612,9 @@ app_state draw(app_state state, const settings& s)
     current.col = 0;
     current.row = 0;
     std::string txt = get_operation_text(state.operation);
-    move((int)rows - 3, 0);
-    std::vector<chtype> attribute_stack;
+    move((int)rows - 3, 0);    
     attrset(DEFAULT_COLOR);
-    attribute_stack.push_back(DEFAULT_COLOR);
     attron(A_BOLD);
-    attribute_stack.push_back(A_BOLD);
     for (auto ch : txt)
       {
       add_ex(position(), SET_NONE);
@@ -635,7 +626,7 @@ app_state draw(app_state state, const settings& s)
     int off_x = txt.length();
     int wide_chars_offset = 0;
     if (!state.operation_buffer.content.empty())
-      draw_line(wide_chars_offset, state.operation_buffer.content[0], current, cursor, attribute_stack, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, SET_NONE, s);
+      draw_line(wide_chars_offset, state.operation_buffer.content[0], current, cursor, DEFAULT_COLOR | A_BOLD, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, SET_NONE, s);
     if ((current == cursor))
       {
       move((int)rows - 3, (int)current.col + off_x + wide_chars_offset);
@@ -644,8 +635,6 @@ app_state draw(app_state state, const settings& s)
       addch(' ');
       attroff(A_REVERSE);
       }
-    attroff(attribute_stack.back());
-    attribute_stack.pop_back();
     }
   else
     {
@@ -1386,6 +1375,7 @@ app_state clear_operation_buffer(app_state state)
   state.operation_buffer.history = immutable::vector<snapshot, false>();
   state.operation_buffer.undo_redo_index = 0;
   state.operation_buffer.start_selection = std::nullopt;
+  state.operation_buffer.rectangular_selection = false;
   state.operation_buffer.pos.row = 0;
   state.operation_buffer.pos.col = 0;
   state.operation_scroll_row = 0;
@@ -1551,6 +1541,22 @@ app_state make_help_buffer(app_state state)
   return state;
   }
 
+app_state move_editor_window_up_down(app_state state, int steps, const settings& s)
+  {
+  int rows, cols;
+  get_editor_window_size(rows, cols, s); 
+  state.scroll_row += steps;  
+  int64_t lastrow = (int64_t)state.buffer.content.size() - 1;
+  if (lastrow < 0)
+    lastrow = 0;
+
+  if (state.scroll_row + rows > lastrow + 1)
+    state.scroll_row = lastrow - rows + 1;
+  if (state.scroll_row < 0)
+    state.scroll_row = 0;
+  return state;
+  }
+
 screen_ex_pixel find_mouse_text_pick(int x, int y)
   {
   int rows, cols;
@@ -1582,7 +1588,17 @@ app_state mouse_motion(app_state state, int x, int y, const settings& s)
     {
     auto p = find_mouse_text_pick(x, y);
     if (p.type == mouse.left_drag_start.type)
+      {
       mouse.left_drag_end = p;
+      if (mouse.left_drag_start.type == SET_TEXT_EDITOR)
+        {
+        state.buffer.pos = p.pos;
+        }
+      else if (mouse.left_drag_start.type == SET_TEXT_COMMAND)
+        {
+        state.command_buffer.pos = p.pos;
+        }
+      }
     }
   if (mouse.middle_dragging)
     {
@@ -1603,6 +1619,30 @@ app_state left_mouse_button_down(app_state state, int x, int y, bool double_clic
   {
   mouse.left_button_down = true;
   mouse.left_drag_start = find_mouse_text_pick(x, y);
+  if (mouse.left_drag_start.type == SET_TEXT_EDITOR)
+    {    
+    state.operation = op_editing;
+    if (!keyb_data.selecting)
+      {
+      state.buffer.start_selection = mouse.left_drag_start.pos;
+      state.buffer.rectangular_selection = false;
+      }
+    state.buffer.pos = mouse.left_drag_start.pos;
+    state.command_buffer = clear_selection(state.command_buffer);
+    keyb_data.selecting = false;
+    }
+  if (mouse.left_drag_start.type == SET_TEXT_COMMAND)
+    {
+    state.operation = op_command_editing;
+    if (!keyb_data.selecting)
+      {
+      state.command_buffer.start_selection = mouse.left_drag_start.pos;
+      state.command_buffer.rectangular_selection = false;
+      }
+    state.command_buffer.pos = mouse.left_drag_start.pos;
+    state.buffer = clear_selection(state.buffer);
+    keyb_data.selecting = false;
+    }
   return state;
   }
 
@@ -1622,11 +1662,21 @@ app_state right_mouse_button_down(app_state state, int x, int y, bool double_cli
 
 app_state left_mouse_button_up(app_state state, int x, int y, const settings& s)
   {
+  mouse.left_dragging = false;    
+  mouse.left_button_down = false;
+
   screen_ex_pixel p = get_ex(y, x);
 
   if (p.type == SET_SCROLLBAR_EDITOR)
     {
-    return state;
+    int offsetx, offsety, cols, rows;
+    get_editor_window_offset(offsetx, offsety, s);
+    get_editor_window_size(rows, cols, s);
+    double fraction = (double)(y - offsety) / (double)rows;
+    int steps = (int)(fraction * rows);
+    if (steps < 1)
+      steps = 1;
+    return move_editor_window_up_down(state, -steps, s);    
     }
 
   p = find_mouse_text_pick(x, y);
@@ -1649,11 +1699,47 @@ app_state left_mouse_button_up(app_state state, int x, int y, const settings& s)
 
 app_state middle_mouse_button_up(app_state state, int x, int y, const settings& s)
   {
+  screen_ex_pixel p = get_ex(y, x);
+  screen_ex_pixel p_left;
+  if (x)
+    p_left = get_ex(y, x - 1);
+
+  if ((p.type == SET_SCROLLBAR_EDITOR) || (p_left.type == SET_SCROLLBAR_EDITOR))
+    {
+    if (p.type != SET_SCROLLBAR_EDITOR)
+      p = p_left;
+    int rows, cols;
+    get_editor_window_size(rows, cols, s);
+    state.scroll_row = p.pos.row;
+    int64_t lastrow = (int64_t)state.buffer.content.size() - 1;
+    if (lastrow < 0)
+      lastrow = 0;
+
+    if (state.scroll_row + rows > lastrow + 1)
+      state.scroll_row = lastrow - rows + 1;
+    if (state.scroll_row < 0)
+      state.scroll_row = 0;
+    return state;
+    }
+
   return state;
   }
 
 app_state right_mouse_button_up(app_state state, int x, int y, const settings& s)
   {
+  screen_ex_pixel p = get_ex(y, x);
+
+  if (p.type == SET_SCROLLBAR_EDITOR)
+    {
+    int offsetx, offsety, cols, rows;
+    get_editor_window_offset(offsetx, offsety, s);
+    get_editor_window_size(rows, cols, s);
+    double fraction = (double)(y - offsety) / (double)rows;
+    int steps = (int)(fraction * rows);
+    if (steps < 1)
+      steps = 1;
+    return move_editor_window_up_down(state, steps, s);
+    }
   return state;
   }
 
@@ -1723,6 +1809,15 @@ std::optional<app_state> process_input(app_state state, settings& s)
             state.operation = op_command_editing;
           else if (state.operation == op_command_editing)
             state.operation = op_editing;
+          return state;
+          }
+          case SDLK_LALT:
+          case SDLK_RALT:
+          {
+          if (state.operation == op_editing && state.buffer.start_selection != std::nullopt)
+            state.buffer.rectangular_selection = true;
+          if (state.operation == op_command_editing && state.command_buffer.start_selection != std::nullopt)
+            state.command_buffer.rectangular_selection = true;
           return state;
           }
           case SDLK_LSHIFT:
@@ -1946,24 +2041,10 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
         else
           {
-          int rows, cols;
-          get_editor_window_size(rows, cols, s);
           int steps = s.mouse_scroll_steps;
-          if (steps <= 1)
-            steps = 1;
           if (event.wheel.y > 0)
-            state.scroll_row -= steps;
-          if (event.wheel.y < 0)
-            state.scroll_row += steps;
-          int64_t lastrow = (int64_t)state.buffer.content.size() - 1;
-          if (lastrow < 0)
-            lastrow = 0;
-
-          if (state.scroll_row + rows > lastrow + 1)
-            state.scroll_row = lastrow - rows + 1;
-          if (state.scroll_row < 0)
-            state.scroll_row = 0;
-          return state;
+            steps = -steps;
+          return move_editor_window_up_down(state, steps, s);          
           }
         break;
         }

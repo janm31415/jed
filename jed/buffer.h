@@ -29,6 +29,22 @@ struct position
     {
     return !(*this == other);
     }
+
+  bool operator <= (const position& other) const
+    {
+    return (*this < other) | (*this == other);
+    }
+
+  bool operator > (const position& other) const
+    {
+    return other < *this;
+    }
+
+  bool operator >= (const position& other) const
+    {
+    return other <= *this;
+    }
+
   };
 
 struct snapshot
@@ -48,6 +64,7 @@ struct file_buffer
   immutable::vector<snapshot, false> history;
   uint64_t undo_redo_index;
   uint8_t modification_mask;
+  bool rectangular_selection;
   };
 
 bool has_selection(file_buffer fb);

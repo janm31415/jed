@@ -11,6 +11,7 @@ file_buffer make_empty_buffer()
   fb.start_selection = std::nullopt;
   fb.modification_mask = 0;
   fb.undo_redo_index = 0;
+  fb.rectangular_selection = false;
   return fb;
   }
 
@@ -130,6 +131,7 @@ file_buffer start_selection(file_buffer fb)
 file_buffer clear_selection(file_buffer fb)
   {
   fb.start_selection = std::nullopt;
+  fb.rectangular_selection = false;
   return fb;
   }
 
