@@ -28,6 +28,7 @@ clipboard.h
 colors.h
 engine.h
 keyboard.h
+pdcex.h
 pref_file.h
 settings.h
 utils.h
@@ -40,6 +41,7 @@ colors.cpp
 engine.cpp
 keyboard.cpp
 main.cpp
+pdcex.cpp
 pref_file.cpp
 settings.cpp
 utils.cpp
@@ -96,3 +98,6 @@ target_link_libraries(jed
     ${SDL_LIBRARIES}
     ${SDL_TTF_LIBRARIES}
     )	
+
+add_custom_command(TARGET jed POST_BUILD 
+   COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/Help.txt" "$<TARGET_FILE_DIR:jed>/Help.txt")

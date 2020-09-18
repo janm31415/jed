@@ -11,6 +11,8 @@ typedef immutable::vector<immutable::vector<wchar_t, false, 5>, false, 5> text;
 
 struct position
   {
+  position() : row(-1), col(-1) {}
+  position(int64_t r, int64_t c) : row(r), col(c) {}
   int64_t row, col;
 
   bool operator < (const position& other) const
@@ -91,3 +93,5 @@ file_buffer move_down(file_buffer fb);
 file_buffer move_home(file_buffer fb);
 
 file_buffer move_end(file_buffer fb);
+
+std::string buffer_to_string(file_buffer fb);

@@ -1,0 +1,6 @@
+
+jed help
+
+
+Ctrl, + : increase command window
+Ctrl, - : decrease command window

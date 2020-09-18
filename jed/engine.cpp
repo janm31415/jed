@@ -3,6 +3,8 @@
 
 #include "colors.h"
 #include "keyboard.h"
+#include "pdcex.h"
+#include "utils.h"
 
 #include <jtk/file_utils.h>
 
@@ -29,12 +31,12 @@ void get_editor_window_size(int& rows, int& cols, const settings& s)
   {
   getmaxyx(stdscr, rows, cols);
   rows -= 4 + s.command_buffer_rows;
-  --cols;
+  cols -= 2;
   }
 
 void get_editor_window_offset(int& offsetx, int& offsety, const settings& s)
   {
-  offsetx = 1;
+  offsetx = 2;
   offsety = 1 + s.command_buffer_rows;
   }
 
@@ -42,12 +44,12 @@ void get_command_window_size(int& rows, int& cols, const settings& s)
   {
   getmaxyx(stdscr, rows, cols);
   rows = s.command_buffer_rows;
-  --cols;
+  cols -= 2;
   }
 
 void get_command_window_offset(int& offsetx, int& offsety, const settings& s)
   {
-  offsetx = 1;
+  offsetx = 2;
   offsety = 1;
   }
 
@@ -136,9 +138,7 @@ void draw_title_bar(app_state state)
   {
   int rows, cols;
   getmaxyx(stdscr, rows, cols);
-  attrset(DEFAULT_COLOR);
-  attron(A_REVERSE);
-  attron(A_BOLD);
+  attrset(COLOR_PAIR(title_bar));
   std::wstring title_bar(cols, ' ');
 
   std::wstring filename = L"file: " + (state.buffer.name.empty() ? std::wstring(L"<noname>") : jtk::convert_string_to_wstring(state.buffer.name));
@@ -150,6 +150,7 @@ void draw_title_bar(app_state state)
   for (int i = 0; i < cols; ++i)
     {
     move(0, i);
+    add_ex(position(), SET_NONE);
     addch(title_bar[i]);
     }
   }
@@ -162,8 +163,12 @@ Returns an x offset (let's call it multiline_offset_x) such that
 equals the x position in the screen of where the next character should come.
 This makes it possible to further fill the line with spaces after calling "draw_line".
 */
-int draw_line(int& wide_characters_offset, line ln, position& current, position cursor, std::vector<chtype>& attribute_stack, int r, int xoffset, int maxcol, std::optional<position> start_selection, const settings& s)
+int draw_line(int& wide_characters_offset, line ln, position& current, position cursor, std::vector<chtype>& attribute_stack, int r, int xoffset, int maxcol, std::optional<position> start_selection, screen_ex_type set_type, const settings& s)
   {
+  int multiline_tag = (int)multiline_tag_editor;
+  if (set_type == SET_TEXT_COMMAND)
+    multiline_tag = (int)multiline_tag_command;
+
   wide_characters_offset = 0;
   bool has_selection = start_selection != std::nullopt;
   bool multiline = (cursor.row == current.row) && (ln.size() >= (maxcol - 1));
@@ -186,6 +191,7 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
       xoffset -= offset;
       move((int)r, (int)current.col + xoffset);
       attron(COLOR_PAIR(multiline_tag));
+      add_ex(position(), SET_NONE);
       addch('$');
       attron(attribute_stack.front());
       ++xoffset;
@@ -217,6 +223,7 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
     uint32_t cwidth = character_width(character, current.col + wide_characters_offset, s);
     for (uint32_t cnt = 0; cnt < cwidth; ++cnt)
       {
+      add_ex(current, set_type);
       addch(character_to_pdc_char(character, cnt, s));
       }
     wide_characters_offset += cwidth - 1;
@@ -232,7 +239,7 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
         }
       attron(attribute_stack.back());
       }
-    if (has_selection && (current == start_selection) && (cursor < start_selection))
+    if (has_selection && (current == start_selection) && (cursor < start_selection) && (attribute_stack.size() >= 2))
       {
       attroff(attribute_stack.back());
       attribute_stack.pop_back();
@@ -245,6 +252,7 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
   if (multiline && (it != it_end) && (page != 0))
     {
     attron(COLOR_PAIR(multiline_tag));
+    add_ex(position(), SET_NONE);
     addch('$');
     attron(attribute_stack.front());
     ++xoffset;
@@ -275,10 +283,17 @@ void draw_help_line(const std::string& text, int r, int sz)
   for (int i = 0; i < length; ++i)
     {
     if (i % 10 == 0 || i % 10 == 1)
+      {
+      //attrset(COMMAND_COLOR);
       attron(A_REVERSE);
+      }
+    add_ex(position(), SET_NONE);
     addch(text[i]);
     if (i % 10 == 0 || i % 10 == 1)
+      {
+      //attrset(DEFAULT_COLOR);
       attroff(A_REVERSE);
+      }
     }
   }
 
@@ -352,6 +367,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
     for (int x = 0; x < offset_x; ++x)
       {
       move((int)r + offset_y, (int)x);
+      add_ex(position(), SET_NONE);
       addch(' ');
       }
     current.col = 0;
@@ -362,6 +378,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
         {
         move((int)r + offset_y, (int)current.col + offset_x);
         attron(A_REVERSE);
+        add_ex(position(), SET_NONE);
         addch(' ');
         attroff(A_REVERSE);
         ++x;
@@ -369,6 +386,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       for (; x < maxcol; ++x)
         {
         move((int)r + offset_y, (int)x + offset_x);
+        add_ex(position(), SET_NONE);
         addch(' ');
         }
       ++current.row;
@@ -376,7 +394,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection, SET_TEXT_COMMAND, s);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
@@ -385,6 +403,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       assert(current.row == fb.content.size() - 1);
       assert(current.col == fb.content.back().size());
       attron(A_REVERSE);
+      add_ex(current, SET_TEXT_COMMAND);
       addch(' ');
       attroff(A_REVERSE);
       ++x;
@@ -392,6 +411,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
     for (; x < maxcol + offset_x; ++x)
       {
       move((int)r + offset_y, (int)x);
+      add_ex(position(), SET_NONE);
       addch(' ');
       }
 
@@ -399,7 +419,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
     }
   }
 
-void draw_buffer(file_buffer fb, int64_t scroll_row, const settings& s, bool active)
+void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, const settings& s, bool active)
   {
   int offset_x = 0;
   int offset_y = 0;
@@ -439,6 +459,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, const settings& s, bool act
         {
         move((int)r + offset_y, (int)current.col + offset_x);
         attron(A_REVERSE);
+        add_ex(position(), SET_NONE);
         addch(' ');
         attroff(A_REVERSE);
         }
@@ -446,7 +467,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, const settings& s, bool act
       }
 
     int wide_characters_offset = 0;
-    draw_line(wide_characters_offset, fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection, s);
+    draw_line(wide_characters_offset, fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection, set_type, s);
 
     if ((current == cursor))// && (current.row == fb.content.size() - 1) && (current.col == fb.content.back().size()))// only occurs on last line, last position
       {
@@ -454,6 +475,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, const settings& s, bool act
       assert(current.row == fb.content.size() - 1);
       assert(current.col == fb.content.back().size());
       attron(A_REVERSE);
+      add_ex(current, set_type);
       addch(' ');
       attroff(A_REVERSE);
       }
@@ -462,9 +484,67 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, const settings& s, bool act
     }
   }
 
+void draw_scroll_bars(app_state state, const settings& s)
+  {
+  const unsigned char scrollbar_ascii_sign = 219;
+
+  int offset_x = 0;
+  int offset_y = 0;
+
+  int maxrow, maxcol;
+  get_editor_window_size(maxrow, maxcol, s);
+  get_editor_window_offset(offset_x, offset_y, s);
+
+  int scroll1 = 0;
+  int scroll2 = maxrow-1;
+
+  if (!state.buffer.content.empty())
+    {
+    scroll1 = (int)((double)state.scroll_row / (double)state.buffer.content.size()*maxrow);
+    scroll2 = (int)((double)(state.scroll_row + maxrow) / (double)state.buffer.content.size()*maxrow);
+    }
+  if (scroll1 >= maxrow)
+    scroll1 = maxrow-1;
+  if (scroll2 >= maxrow)
+    scroll2 = maxrow-1;
+
+
+  attron(COLOR_PAIR(scroll_bar_b_editor));
+  
+  for (int r = 0; r < maxrow; ++r)
+    {
+    move(r + offset_y, 0);
+
+    if (r == scroll1)
+      {
+      attron(COLOR_PAIR(scroll_bar_f_editor));
+      }
+
+    int rowpos = 0;
+    if (!state.buffer.content.empty())
+      {
+      rowpos = (int)((double)r*(double)state.buffer.content.size() / (double)maxrow);
+      if (rowpos >= state.buffer.content.size())
+        rowpos = state.buffer.content.size() - 1;
+      }
+
+    add_ex(position(rowpos, 0), SET_SCROLLBAR_EDITOR);
+    addch(ascii_to_utf16(scrollbar_ascii_sign));
+
+    
+    if (r == scroll2)
+      {
+      attron(COLOR_PAIR(scroll_bar_b_editor));
+      }
+    }
+
+  }
+
 app_state draw(app_state state, const settings& s)
   {
   erase();
+
+  invalidate_ex();
 
   draw_title_bar(state);
 
@@ -472,12 +552,14 @@ app_state draw(app_state state, const settings& s)
     {
     state.operation_buffer.pos.col = -1;
     state.operation_buffer.pos.row = -1;
-    draw_buffer(state.operation_buffer, state.operation_scroll_row, s, false);
+    draw_buffer(state.operation_buffer, state.operation_scroll_row, SET_NONE, s, false);
     }
   else
-    draw_buffer(state.buffer, state.scroll_row, s, state.operation == op_editing);
+    draw_buffer(state.buffer, state.scroll_row, SET_TEXT_EDITOR, s, state.operation == op_editing);
 
   draw_command_buffer(state.command_buffer, state.command_scroll_row, s, state.operation == op_command_editing);
+
+  draw_scroll_bars(state, s);
 
   if (state.operation != op_editing && state.operation != op_help && state.operation != op_command_editing)
     {
@@ -495,18 +577,22 @@ app_state draw(app_state state, const settings& s)
     attron(A_BOLD);
     attribute_stack.push_back(A_BOLD);
     for (auto ch : txt)
+      {
+      add_ex(position(), SET_NONE);
       addch(ch);
+      }
     int maxrow, maxcol;
     get_editor_window_size(maxrow, maxcol, s);
     int cols_available = maxcol - txt.length();
     int off_x = txt.length();
     int wide_chars_offset = 0;
     if (!state.operation_buffer.content.empty())
-      draw_line(wide_chars_offset, state.operation_buffer.content[0], current, cursor, attribute_stack, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, s);
+      draw_line(wide_chars_offset, state.operation_buffer.content[0], current, cursor, attribute_stack, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, SET_NONE, s);
     if ((current == cursor))
       {
       move((int)rows - 3, (int)current.col + off_x + wide_chars_offset);
       attron(A_REVERSE);
+      add_ex(position(), SET_NONE);
       addch(' ');
       attroff(A_REVERSE);
       }
@@ -515,6 +601,7 @@ app_state draw(app_state state, const settings& s)
     }
   else
     {
+    attrset(DEFAULT_COLOR);
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
     int message_length = (int)state.message.size();
@@ -525,6 +612,7 @@ app_state draw(app_state state, const settings& s)
       for (auto ch : state.message)
         {
         move(rows - 3, offset);
+        add_ex(position(), SET_NONE);
         addch(ch);
         ++offset;
         }
@@ -1400,38 +1488,17 @@ app_state select_all(app_state state, const settings& s)
 
 app_state make_help_buffer(app_state state)
   {
-  std::string txt = R"(Help
-----
-
-sdf
-adsf
-sdf
-sdf
-sadf
-asdf
-asdf
-asdf
-sadf
-asdf
-sadf
-asdff
-asdf
-asdf
-asdf
-sadf
-asdf
-asdf
-asdf
-asdf
-asd
-fasdf
-asd
-fasd
-fasd
-f
-)";
+  std::string help_file = get_file_in_executable_path("Help.txt");  
   state = clear_operation_buffer(state);
-  state.operation_buffer = insert(state.operation_buffer, txt, false);
+  if (jtk::file_exists(help_file))
+    {
+    state.operation_buffer = read_from_file(help_file);
+    }
+  else
+    {
+    std::string txt = "error: no help file found";
+    state.operation_buffer = insert(state.operation_buffer, txt, false);
+    }
   state.message = string_to_line("[Help]");
   return state;
   }
@@ -1452,12 +1519,26 @@ std::optional<app_state> process_input(app_state state, settings& s)
         if (event.window.event == SDL_WINDOWEVENT_RESIZED)
           {
           auto new_w = event.window.data1;
-          auto new_h = event.window.data2;
+          auto new_h = event.window.data2;         
+
           state.w = (new_w / font_width) * font_width;
           state.h = (new_h / font_height) * font_height;
           if (state.w != new_w || state.h != new_h)
-            SDL_SetWindowSize(pdc_window, state.w, state.h);
+            {
+            auto flags = SDL_GetWindowFlags(pdc_window);
+            if (flags & SDL_WINDOW_MAXIMIZED)
+              {
+              //int x, y;
+              //SDL_GetWindowPosition(pdc_window, &x, &y);
+              //SDL_RestoreWindow(pdc_window);
+              //SDL_SetWindowPosition(pdc_window, x, y);
+              state.w = new_w;
+              state.h = new_h;
+              }
+            SDL_SetWindowSize(pdc_window, state.w, state.h);            
+            }
           resize_term(state.h / font_height, state.w / font_width);
+          resize_term_ex(state.h / font_height, state.w / font_width);
           return state;
           }
         break;
@@ -1501,6 +1582,11 @@ std::optional<app_state> process_input(app_state state, settings& s)
             if (state.buffer.start_selection == std::nullopt)
               state.buffer.start_selection = get_actual_position(state.buffer);
             }
+          else if (state.operation == op_command_editing)
+            {
+            if (state.command_buffer.start_selection == std::nullopt)
+              state.command_buffer.start_selection = get_actual_position(state.command_buffer);
+            }
           else
             {
             if (state.operation_buffer.start_selection == std::nullopt)
@@ -1513,6 +1599,10 @@ std::optional<app_state> process_input(app_state state, settings& s)
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
             ++s.command_buffer_rows;
+            int rows, cols;
+            getmaxyx(stdscr, rows, cols);
+            if (s.command_buffer_rows > rows - 4)
+              s.command_buffer_rows = rows - 4;
             return state;
             }
           break;
@@ -1691,6 +1781,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
     state.buffer = read_from_file(std::string(argv[1]));
   else
     state.buffer = make_empty_buffer();
+  state.command_buffer = insert(make_empty_buffer(), s.command_text, false);
   state.operation = op_editing;
   state.scroll_row = 0;
   state.operation_scroll_row = 0;
@@ -1698,13 +1789,14 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 
   SDL_ShowCursor(1);
   SDL_SetWindowSize(pdc_window, state.w, state.h);
-
-  SDL_DisplayMode DM;
-  SDL_GetCurrentDisplayMode(0, &DM);
-
-  SDL_SetWindowPosition(pdc_window, (DM.w - state.w) / 2, (DM.h - state.h) / 2);
+  SDL_SetWindowPosition(pdc_window, s.x, s.y);
+  //SDL_DisplayMode DM;
+  //SDL_GetCurrentDisplayMode(0, &DM);
+  //
+  //SDL_SetWindowPosition(pdc_window, (DM.w - state.w) / 2, (DM.h - state.h) / 2);
 
   resize_term(state.h / font_height, state.w / font_width);
+  resize_term_ex(state.h / font_height, state.w / font_width);
 
   }
 
@@ -1728,4 +1820,6 @@ void engine::run()
 
   s.w = state.w / font_width;
   s.h = state.h / font_height;
+  SDL_GetWindowPosition(pdc_window, &s.x, &s.y);
+  s.command_text = buffer_to_string(state.command_buffer);
   }
