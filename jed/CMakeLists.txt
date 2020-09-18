@@ -28,6 +28,7 @@ clipboard.h
 colors.h
 engine.h
 keyboard.h
+mouse.h
 pdcex.h
 pref_file.h
 settings.h
@@ -41,6 +42,7 @@ colors.cpp
 engine.cpp
 keyboard.cpp
 main.cpp
+mouse.cpp
 pdcex.cpp
 pref_file.cpp
 settings.cpp

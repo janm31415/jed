@@ -517,3 +517,15 @@ std::string buffer_to_string(file_buffer fb)
     }
   return out;
   }
+
+position get_last_position(file_buffer fb)
+  {
+  if (fb.content.empty())
+    return position(0, 0);
+  int64_t row = fb.content.size() - 1;
+  if (fb.content.back().empty())
+    return position(row, 0);
+  if (fb.content.back().back() != L'\n')
+    return position(row, fb.content.back().size());
+  return position(row, fb.content.back().size()-1);
+  }

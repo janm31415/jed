@@ -12,6 +12,8 @@ struct settings
   int w, h, x, y;
   int command_buffer_rows;
   std::string command_text;
+  int font_size;
+  int mouse_scroll_steps;
   };
 
 settings read_settings(const char* filename);

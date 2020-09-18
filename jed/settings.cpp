@@ -15,6 +15,8 @@ settings::settings()
   y = 100;
   command_buffer_rows = 1;
   command_text = "New Open Save Exit";
+  font_size = 17;
+  mouse_scroll_steps = 3;
   }
 
 settings read_settings(const char* filename)
@@ -31,6 +33,8 @@ settings read_settings(const char* filename)
   f["command_text"] >> s.command_text;
   f["x"] >> s.x;
   f["y"] >> s.y;
+  f["font_size"] >> s.font_size;
+  f["mouse_scroll_steps"] >> s.mouse_scroll_steps;
   f.release();
   return s;
   }
@@ -47,5 +51,7 @@ void write_settings(const settings& s, const char* filename)
   f << "command_text" << s.command_text;
   f << "x" << s.x;
   f << "y" << s.y;
+  f << "font_size" << s.font_size;
+  f << "mouse_scroll_steps" << s.mouse_scroll_steps;
   f.release();
   }

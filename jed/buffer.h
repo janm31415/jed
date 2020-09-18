@@ -95,3 +95,5 @@ file_buffer move_home(file_buffer fb);
 file_buffer move_end(file_buffer fb);
 
 std::string buffer_to_string(file_buffer fb);
+
+position get_last_position(file_buffer fb);

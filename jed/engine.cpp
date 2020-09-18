@@ -3,6 +3,7 @@
 
 #include "colors.h"
 #include "keyboard.h"
+#include "mouse.h"
 #include "pdcex.h"
 #include "utils.h"
 
@@ -25,6 +26,37 @@ extern "C"
 namespace
   {
   int font_width, font_height;
+  }
+
+app_state resize_font(app_state state, int font_size, settings& s)
+  {
+  pdc_font_size = font_size;
+  s.font_size = font_size;
+#ifdef _WIN32
+  TTF_CloseFont(pdc_ttffont);
+  pdc_ttffont = TTF_OpenFont("C:/Windows/Fonts/consola.ttf", pdc_font_size);
+#elif defined(unix)
+  TTF_CloseFont(pdc_ttffont);
+  pdc_ttffont = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", pdc_font_size);
+#elif defined(__APPLE__)
+  TTF_CloseFont(pdc_ttffont);
+  pdc_ttffont = TTF_OpenFont("/System/Library/Fonts/Menlo.ttc", pdc_font_size);
+#endif
+
+  TTF_SizeText(pdc_ttffont, "W", &font_width, &font_height);
+  pdc_fheight = font_height;
+  pdc_fwidth = font_width;
+  pdc_fthick = pdc_font_size / 20 + 1;
+
+  state.w = (state.w / font_width) * font_width;
+  state.h = (state.h / font_height) * font_height;
+
+  SDL_SetWindowSize(pdc_window, state.w, state.h);
+
+  resize_term(state.h / font_height, state.w / font_width);
+  resize_term_ex(state.h / font_height, state.w / font_width);
+
+  return state;
   }
 
 void get_editor_window_size(int& rows, int& cols, const settings& s)
@@ -158,7 +190,7 @@ void draw_title_bar(app_state state)
 #define MULTILINEOFFSET 10
 
 /*
-Returns an x offset (let's call it multiline_offset_x) such that 
+Returns an x offset (let's call it multiline_offset_x) such that
   int x = (int)current.col + multiline_offset_x + wide_characters_offset;
 equals the x position in the screen of where the next character should come.
 This makes it possible to further fill the line with spaces after calling "draw_line".
@@ -364,13 +396,13 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
 
   for (int r = 0; r < maxrow; ++r)
     {
+    current.col = 0;
     for (int x = 0; x < offset_x; ++x)
       {
       move((int)r + offset_y, (int)x);
-      add_ex(position(), SET_NONE);
+      add_ex(current, SET_TEXT_COMMAND);
       addch(' ');
-      }
-    current.col = 0;
+      }    
     if (current.row >= fb.content.size())
       {
       int x = 0;
@@ -378,7 +410,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
         {
         move((int)r + offset_y, (int)current.col + offset_x);
         attron(A_REVERSE);
-        add_ex(position(), SET_NONE);
+        add_ex(current, SET_TEXT_COMMAND);
         addch(' ');
         attroff(A_REVERSE);
         ++x;
@@ -386,7 +418,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       for (; x < maxcol; ++x)
         {
         move((int)r + offset_y, (int)x + offset_x);
-        add_ex(position(), SET_NONE);
+        add_ex(get_last_position(fb), SET_TEXT_COMMAND);
         addch(' ');
         }
       ++current.row;
@@ -411,7 +443,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
     for (; x < maxcol + offset_x; ++x)
       {
       move((int)r + offset_y, (int)x);
-      add_ex(position(), SET_NONE);
+      add_ex(current, SET_TEXT_COMMAND);
       addch(' ');
       }
 
@@ -450,7 +482,8 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
     attribute_stack.push_back(A_REVERSE);
     }
 
-  for (int r = 0; r < maxrow; ++r)
+  int r = 0;
+  for (; r < maxrow; ++r)
     {
     current.col = 0;
     if (current.row >= fb.content.size())
@@ -459,7 +492,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
         {
         move((int)r + offset_y, (int)current.col + offset_x);
         attron(A_REVERSE);
-        add_ex(position(), SET_NONE);
+        add_ex(position(0, 0), set_type);
         addch(' ');
         attroff(A_REVERSE);
         }
@@ -467,20 +500,35 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       }
 
     int wide_characters_offset = 0;
-    draw_line(wide_characters_offset, fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection, set_type, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, attribute_stack, r + offset_y, offset_x, maxcol, fb.start_selection, set_type, s);
 
-    if ((current == cursor))// && (current.row == fb.content.size() - 1) && (current.col == fb.content.back().size()))// only occurs on last line, last position
+    int x = (int)current.col + multiline_offset_x + wide_characters_offset;
+    if ((current == cursor))
       {
-      move((int)r + offset_y, (int)current.col + offset_x + wide_characters_offset);
+      move((int)r + offset_y, x);
       assert(current.row == fb.content.size() - 1);
       assert(current.col == fb.content.back().size());
       attron(A_REVERSE);
       add_ex(current, set_type);
       addch(' ');
       attroff(A_REVERSE);
+      ++x;
+      }
+
+    if (x < maxcol)
+      {
+      move((int)r + offset_y, (int)x);
+      add_ex(current, set_type);
+      addch(' ');
       }
 
     ++current.row;
+    }
+
+  for (; r < maxrow; ++r)
+    {
+    move((int)r + offset_y, offset_x);
+    add_ex(get_last_position(fb), set_type);
     }
   }
 
@@ -496,7 +544,7 @@ void draw_scroll_bars(app_state state, const settings& s)
   get_editor_window_offset(offset_x, offset_y, s);
 
   int scroll1 = 0;
-  int scroll2 = maxrow-1;
+  int scroll2 = maxrow - 1;
 
   if (!state.buffer.content.empty())
     {
@@ -504,13 +552,13 @@ void draw_scroll_bars(app_state state, const settings& s)
     scroll2 = (int)((double)(state.scroll_row + maxrow) / (double)state.buffer.content.size()*maxrow);
     }
   if (scroll1 >= maxrow)
-    scroll1 = maxrow-1;
+    scroll1 = maxrow - 1;
   if (scroll2 >= maxrow)
-    scroll2 = maxrow-1;
+    scroll2 = maxrow - 1;
 
 
   attron(COLOR_PAIR(scroll_bar_b_editor));
-  
+
   for (int r = 0; r < maxrow; ++r)
     {
     move(r + offset_y, 0);
@@ -531,7 +579,7 @@ void draw_scroll_bars(app_state state, const settings& s)
     add_ex(position(rowpos, 0), SET_SCROLLBAR_EDITOR);
     addch(ascii_to_utf16(scrollbar_ascii_sign));
 
-    
+
     if (r == scroll2)
       {
       attron(COLOR_PAIR(scroll_bar_b_editor));
@@ -1488,7 +1536,7 @@ app_state select_all(app_state state, const settings& s)
 
 app_state make_help_buffer(app_state state)
   {
-  std::string help_file = get_file_in_executable_path("Help.txt");  
+  std::string help_file = get_file_in_executable_path("Help.txt");
   state = clear_operation_buffer(state);
   if (jtk::file_exists(help_file))
     {
@@ -1500,6 +1548,112 @@ app_state make_help_buffer(app_state state)
     state.operation_buffer = insert(state.operation_buffer, txt, false);
     }
   state.message = string_to_line("[Help]");
+  return state;
+  }
+
+screen_ex_pixel find_mouse_text_pick(int x, int y)
+  {
+  int rows, cols;
+  getmaxyx(stdscr, rows, cols);
+
+  int x0 = x;
+  screen_ex_pixel p = get_ex(y, x);
+  while (x > 0 && (p.type != SET_TEXT_EDITOR && p.type != SET_TEXT_COMMAND))
+    p = get_ex(y, --x);
+  if (p.type != SET_TEXT_EDITOR && p.type != SET_TEXT_COMMAND)
+    {
+    x = x0 + 1;
+    while (x < cols && (p.type != SET_TEXT_EDITOR && p.type != SET_TEXT_COMMAND))
+      p = get_ex(y, ++x);
+    }
+  return p;
+  }
+
+app_state mouse_motion(app_state state, int x, int y, const settings& s)
+  {
+  if (mouse.left_button_down)
+    mouse.left_dragging = true;
+  if (mouse.middle_button_down)
+    mouse.middle_dragging = true;
+  if (mouse.right_button_down)
+    mouse.right_dragging = true;
+
+  if (mouse.left_dragging)
+    {
+    auto p = find_mouse_text_pick(x, y);
+    if (p.type == mouse.left_drag_start.type)
+      mouse.left_drag_end = p;
+    }
+  if (mouse.middle_dragging)
+    {
+    auto p = find_mouse_text_pick(x, y);
+    if (p.type == mouse.middle_drag_start.type)
+      mouse.middle_drag_end = p;
+    }
+  if (mouse.right_dragging)
+    {
+    auto p = find_mouse_text_pick(x, y);
+    if (p.type == mouse.right_drag_start.type)
+      mouse.right_drag_end = p;
+    }
+  return state;
+  }
+
+app_state left_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
+  {
+  mouse.left_button_down = true;
+  mouse.left_drag_start = find_mouse_text_pick(x, y);
+  return state;
+  }
+
+app_state middle_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
+  {
+  mouse.middle_button_down = true;
+  mouse.middle_drag_start = find_mouse_text_pick(x, y);
+  return state;
+  }
+
+app_state right_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
+  {
+  mouse.right_button_down = true;
+  mouse.right_drag_start = find_mouse_text_pick(x, y);
+  return state;
+  }
+
+app_state left_mouse_button_up(app_state state, int x, int y, const settings& s)
+  {
+  screen_ex_pixel p = get_ex(y, x);
+
+  if (p.type == SET_SCROLLBAR_EDITOR)
+    {
+    return state;
+    }
+
+  p = find_mouse_text_pick(x, y);
+
+  if (p.type == SET_TEXT_EDITOR)
+    {
+    state.operation = op_editing;
+    state.buffer.pos = p.pos;
+    return check_scroll_position(state, s);
+    }
+  else if (p.type == SET_TEXT_COMMAND)
+    {
+    state.operation = op_command_editing;
+    state.command_buffer.pos = p.pos;
+    return check_command_scroll_position(state, s);
+    }
+
+  return state;
+  }
+
+app_state middle_mouse_button_up(app_state state, int x, int y, const settings& s)
+  {
+  return state;
+  }
+
+app_state right_mouse_button_up(app_state state, int x, int y, const settings& s)
+  {
   return state;
   }
 
@@ -1519,7 +1673,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
         if (event.window.event == SDL_WINDOWEVENT_RESIZED)
           {
           auto new_w = event.window.data1;
-          auto new_h = event.window.data2;         
+          auto new_h = event.window.data2;
 
           state.w = (new_w / font_width) * font_width;
           state.h = (new_h / font_height) * font_height;
@@ -1535,7 +1689,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
               state.w = new_w;
               state.h = new_h;
               }
-            SDL_SetWindowSize(pdc_window, state.w, state.h);            
+            SDL_SetWindowSize(pdc_window, state.w, state.h);
             }
           resize_term(state.h / font_height, state.w / font_width);
           resize_term_ex(state.h / font_height, state.w / font_width);
@@ -1740,7 +1894,84 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
         break;
         } // case SDLK_KEYUP:
-        case SDL_QUIT: return exit(state);
+        case SDL_MOUSEMOTION:
+        {
+        int x = event.motion.x / font_width;
+        int y = event.motion.y / font_height;
+        mouse.prev_mouse_x = mouse.mouse_x;
+        mouse.prev_mouse_y = mouse.mouse_y;
+        mouse.mouse_x = event.motion.x;
+        mouse.mouse_y = event.motion.y;
+        return mouse_motion(state, x, y, s);
+        break;
+        }
+        case SDL_MOUSEBUTTONDOWN:
+        {
+        mouse.mouse_x_at_button_press = event.button.x;
+        mouse.mouse_y_at_button_press = event.button.y;
+        int x = event.button.x / font_width;
+        int y = event.button.y / font_height;
+        bool double_click = event.button.clicks > 1;
+        if (event.button.button == 1)
+          return left_mouse_button_down(state, x, y, double_click, s);
+        else if (event.button.button == 2)
+          return middle_mouse_button_down(state, x, y, double_click, s);
+        else if (event.button.button == 3)
+          return right_mouse_button_down(state, x, y, double_click, s);
+        break;
+        }
+        case SDL_MOUSEBUTTONUP:
+        {
+        int x = event.button.x / font_width;
+        int y = event.button.y / font_height;
+        if (event.button.button == 1)
+          return left_mouse_button_up(state, x, y, s);
+        else if (event.button.button == 2)
+          return middle_mouse_button_up(state, x, y, s);
+        else if (event.button.button == 3)
+          return right_mouse_button_up(state, x, y, s);
+        break;
+        }
+        case SDL_MOUSEWHEEL:
+        {
+        if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          {
+          if (event.wheel.y > 0)
+            ++pdc_font_size;
+          else if (event.wheel.y < 0)
+            --pdc_font_size;
+          if (pdc_font_size < 1)
+            pdc_font_size = 1;
+          return resize_font(state, pdc_font_size, s);
+          }
+        else
+          {
+          int rows, cols;
+          get_editor_window_size(rows, cols, s);
+          int steps = s.mouse_scroll_steps;
+          if (steps <= 1)
+            steps = 1;
+          if (event.wheel.y > 0)
+            state.scroll_row -= steps;
+          if (event.wheel.y < 0)
+            state.scroll_row += steps;
+          int64_t lastrow = (int64_t)state.buffer.content.size() - 1;
+          if (lastrow < 0)
+            lastrow = 0;
+
+          if (state.scroll_row + rows > lastrow + 1)
+            state.scroll_row = lastrow - rows + 1;
+          if (state.scroll_row < 0)
+            state.scroll_row = 0;
+          return state;
+          }
+        break;
+        }
+        case SDL_QUIT: 
+        {
+        state.operation = op_editing;
+        return cancel(state);
+        }
         } // switch (event.type)
       }
     std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(5.0));
@@ -1749,7 +1980,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
 
 engine::engine(int argc, char** argv, const settings& input_settings) : s(input_settings)
   {
-  pdc_font_size = 17;
+  pdc_font_size = s.font_size;
 #ifdef _WIN32
   TTF_CloseFont(pdc_ttffont);
   pdc_ttffont = TTF_OpenFont("C:/Windows/Fonts/consola.ttf", pdc_font_size);
@@ -1798,7 +2029,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   resize_term(state.h / font_height, state.w / font_width);
   resize_term_ex(state.h / font_height, state.w / font_width);
 
-  }
+    }
 
 engine::~engine()
   {
