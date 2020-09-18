@@ -217,7 +217,7 @@ Returns an x offset (let's call it multiline_offset_x) such that
 equals the x position in the screen of where the next character should come.
 This makes it possible to further fill the line with spaces after calling "draw_line".
 */
-int draw_line(int& wide_characters_offset, line ln, position& current, position cursor, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, screen_ex_type set_type, const settings& s)
+int draw_line(int& wide_characters_offset, line ln, position& current, position cursor, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s)
   {
   int multiline_tag = (int)multiline_tag_editor;
   if (set_type == SET_TEXT_COMMAND)
@@ -258,7 +258,7 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
     if (current.col >= maxcol)
       break;
 
-    if (in_selection(current, cursor, start_selection, rectangular))
+    if (active && in_selection(current, cursor, start_selection, rectangular))
       attron(A_REVERSE);
     else
       attroff(A_REVERSE);
@@ -422,7 +422,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, SET_TEXT_COMMAND, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
@@ -493,7 +493,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, set_type, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, s);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
@@ -626,7 +626,7 @@ app_state draw(app_state state, const settings& s)
     int off_x = txt.length();
     int wide_chars_offset = 0;
     if (!state.operation_buffer.content.empty())
-      draw_line(wide_chars_offset, state.operation_buffer.content[0], current, cursor, DEFAULT_COLOR | A_BOLD, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, SET_NONE, s);
+      draw_line(wide_chars_offset, state.operation_buffer.content[0], current, cursor, DEFAULT_COLOR | A_BOLD, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_NONE, s);
     if ((current == cursor))
       {
       move((int)rows - 3, (int)current.col + off_x + wide_chars_offset);
@@ -1254,7 +1254,7 @@ std::string clean_filename(std::string name)
   return name;
   }
 
-app_state open_file(app_state state)
+app_state open_file(app_state state, const settings& s)
   {
   std::wstring wfilename;
   if (!state.operation_buffer.content.empty())
@@ -1287,7 +1287,7 @@ app_state open_file(app_state state)
     std::string message = "Opened file " + filename;
     state.message = string_to_line(message);
     }
-  return state;
+  return check_scroll_position(state, s);
   }
 
 app_state save_file(app_state state)
@@ -1331,14 +1331,14 @@ app_state make_new_buffer(app_state state)
   return state;
   }
 
-std::optional<app_state> ret_operation(app_state state)
+std::optional<app_state> ret_operation(app_state state, const settings& s)
   {
   bool done = false;
   while (!done)
     {
     switch (state.operation)
       {
-      case op_open: state = open_file(state); break;
+      case op_open: state = open_file(state, s); break;
       case op_save: state = save_file(state); break;
       case op_query_save: state = save_file(state); break;
       case op_new: state = make_new_buffer(state); break;
@@ -1366,7 +1366,7 @@ std::optional<app_state> ret(app_state state, const settings& s)
   else if (state.operation == op_command_editing)
     return ret_command(state, s);
   else
-    return ret_operation(state);
+    return ret_operation(state, s);
   }
 
 app_state clear_operation_buffer(app_state state)

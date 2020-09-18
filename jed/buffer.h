@@ -53,6 +53,7 @@ struct snapshot
   position pos;
   std::optional<position> start_selection;
   uint8_t modification_mask;
+  bool rectangular_selection;
   };
 
 struct file_buffer

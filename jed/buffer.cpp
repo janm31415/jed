@@ -142,6 +142,7 @@ file_buffer push_undo(file_buffer fb)
   ss.pos = fb.pos;
   ss.start_selection = fb.start_selection;
   ss.modification_mask = fb.modification_mask;
+  ss.rectangular_selection = fb.rectangular_selection;
   fb.history = fb.history.push_back(ss);
   fb.undo_redo_index = fb.history.size();
   return fb;
@@ -259,6 +260,21 @@ file_buffer insert(file_buffer fb, text txt, bool save_undo)
   return fb;
   }
 
+namespace
+  {
+  void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_col, int64_t& max_col, position p1, position p2)
+    {
+    min_col = p1.col;
+    min_row = p1.row;
+    max_col = p2.col;
+    max_row = p2.row;
+    if (max_col < min_col)
+      std::swap(max_col, min_col);
+    if (max_row < min_row)
+      std::swap(max_row, min_row);
+    }
+  }
+
 file_buffer erase(file_buffer fb, bool save_undo)
   {
   if (fb.content.empty())
@@ -287,13 +303,15 @@ file_buffer erase(file_buffer fb, bool save_undo)
     }
   else
     {
-    fb.start_selection = std::nullopt;
+    
     auto p1 = get_actual_position(fb);
     auto p2 = *fb.start_selection;
     if (p2 < p1)
       std::swap(p1, p2);
     if (p1.row == p2.row)
       {
+      fb.start_selection = std::nullopt;
+      fb.rectangular_selection = false;
       fb.content = fb.content.set(p1.row, fb.content[p1.row].erase(p1.col, p2.col));
       fb.pos.col = p1.col;
       fb.pos.row = p1.row;
@@ -301,16 +319,31 @@ file_buffer erase(file_buffer fb, bool save_undo)
       }
     else
       {
-      bool remove_line = false;
-      int64_t tgt = p2.col + 1;
-      if (tgt > fb.content[p2.row].size() - 1)
-        remove_line = true;
-      fb.content = fb.content.set(p2.row, fb.content[p2.row].erase(0, tgt));
-      fb.content = fb.content.erase(p1.row + 1, remove_line ? p2.row + 1 : p2.row);
-      fb.content = fb.content.set(p1.row, fb.content[p1.row].erase(p1.col, fb.content[p1.row].size() - 1));
-      fb.pos.col = p1.col;
-      fb.pos.row = p1.row;
-      fb = erase_right(fb, false);
+      if (!fb.rectangular_selection)
+        {
+        fb.start_selection = std::nullopt;
+        bool remove_line = false;
+        int64_t tgt = p2.col + 1;
+        if (tgt > fb.content[p2.row].size() - 1)
+          remove_line = true;
+        fb.content = fb.content.set(p2.row, fb.content[p2.row].erase(0, tgt));
+        fb.content = fb.content.erase(p1.row + 1, remove_line ? p2.row + 1 : p2.row);
+        fb.content = fb.content.set(p1.row, fb.content[p1.row].erase(p1.col, fb.content[p1.row].size() - 1));
+        fb.pos.col = p1.col;
+        fb.pos.row = p1.row;
+        fb = erase_right(fb, false);
+        }
+      else
+        {
+        int64_t mincol, maxcol, minrow, maxrow;
+        get_rectangular_selection(minrow, maxrow, mincol, maxcol, p1, p2);
+        for (int64_t r = minrow; r <= maxrow; ++r)
+          {
+          fb.content = fb.content.set(r, fb.content[r].take(mincol) + fb.content[r].drop(maxcol + 1));
+          }
+        fb.start_selection->col = mincol;
+        fb.pos.col = mincol;
+        }
       }
     }
   return fb;
@@ -351,7 +384,6 @@ text get_selection(file_buffer fb)
     if (fb.content.empty() || fb.content[p1.row].empty())
       return text();
     return text().push_back(line().push_back(fb.content[p1.row][p1.col]));
-    //return text();
     }
   auto p2 = *fb.start_selection;
   if (p2 < p1)
@@ -368,12 +400,27 @@ text get_selection(file_buffer fb)
   text out;
   auto trans = out.transient();
 
-  line ln1 = fb.content[p1.row].drop(p1.col);
-  trans.push_back(ln1);
-  for (int64_t r = p1.row + 1; r < p2.row; ++r)
-    trans.push_back(fb.content[r]);
-  line ln2 = fb.content[p2.row].take(p2.col + 1);
-  trans.push_back(ln2);
+  if (!fb.rectangular_selection)
+    {
+    line ln1 = fb.content[p1.row].drop(p1.col);
+    trans.push_back(ln1);
+    for (int64_t r = p1.row + 1; r < p2.row; ++r)
+      trans.push_back(fb.content[r]);
+    line ln2 = fb.content[p2.row].take(p2.col + 1);
+    trans.push_back(ln2);
+    }
+  else
+    {
+    int64_t mincol, maxcol, minrow, maxrow;
+    get_rectangular_selection(minrow, maxrow, mincol, maxcol, p1, p2);
+    for (int64_t r = minrow; r <= maxrow; ++r)
+      {
+      auto ln = fb.content[r].take(maxcol + 1).drop(mincol);
+      if ((r != maxrow) && (ln.empty() || ln.back() != L'\n'))
+        ln = ln.push_back(L'\n');
+      trans.push_back(ln);
+      }
+    }
 
   out = trans.persistent();
   return out;
@@ -394,6 +441,7 @@ file_buffer undo(file_buffer fb)
     fb.pos = ss.pos;
     fb.modification_mask = ss.modification_mask;
     fb.start_selection = ss.start_selection;
+    fb.rectangular_selection = ss.rectangular_selection;
     fb.history = fb.history.push_back(ss);
     }
   return fb;
@@ -409,6 +457,7 @@ file_buffer redo(file_buffer fb)
     fb.pos = ss.pos;
     fb.modification_mask = ss.modification_mask;
     fb.start_selection = ss.start_selection;
+    fb.rectangular_selection = ss.rectangular_selection;
     fb.history = fb.history.push_back(ss);
     }
   return fb;
