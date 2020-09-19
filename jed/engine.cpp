@@ -658,17 +658,27 @@ app_state draw(app_state state, const settings& s)
     int maxrow, maxcol;
     get_editor_window_size(maxrow, maxcol, s);
     int cols_available = maxcol - txt.length();
-    int off_x = txt.length();
-    int wide_chars_offset = 0;
+    int wide_characters_offset = 0;
+    int multiline_offset_x = txt.length();
     if (!state.operation_buffer.content.empty())
-      draw_line(wide_chars_offset, state.operation_buffer.content[0], current, cursor, state.operation_buffer.pos, DEFAULT_COLOR | A_BOLD, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_NONE, s);
+      multiline_offset_x = draw_line(wide_characters_offset, state.operation_buffer.content[0], current, cursor, state.operation_buffer.pos, DEFAULT_COLOR | A_BOLD, rows - 3, multiline_offset_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_TEXT_OPERATION, s);
+    int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
       {
-      move((int)rows - 3, (int)current.col + off_x + wide_chars_offset);
+      move((int)rows - 3, (int)x);
       attron(A_REVERSE);
-      add_ex(position(), SET_NONE);
+      add_ex(position(), SET_TEXT_OPERATION);
       addch(' ');
-      attroff(A_REVERSE);
+      ++x;
+      }
+    attroff(A_REVERSE);
+    while (x < maxcol)
+      {
+      move((int)rows-3, (int)x);
+      add_ex(current, SET_TEXT_OPERATION);
+      addch(' ');
+      ++current.col;
+      ++x;
       }
     }
   else
@@ -1592,6 +1602,79 @@ app_state move_editor_window_up_down(app_state state, int steps, const settings&
   return state;
   }
 
+bool valid_command_char(wchar_t ch)
+  {
+  return (ch != L' ' && ch != L'\n' && ch != L'\r');
+  }
+
+std::wstring clean_command(std::wstring command)
+  {
+  while (!command.empty() && (!valid_command_char(command.back())))
+    command.pop_back();
+  while (!command.empty() && (!valid_command_char(command.front())))
+    command.erase(command.begin());
+  return command;
+  }
+
+std::wstring find_command(file_buffer fb, position pos, const settings& s)
+  {
+  auto cursor = get_actual_position(fb);
+  if (has_nontrivial_selection(fb) && in_selection(pos, cursor, fb.pos, fb.start_selection, fb.rectangular_selection))
+    {
+    auto txt = get_selection(fb);
+    std::wstring out;
+    for (auto line : txt)
+      {
+      for (auto ch : line)
+        out.push_back(ch);
+      }
+    return clean_command(out);
+    }
+  if (fb.content.size() <= pos.row)
+    return std::wstring();
+  auto ln = fb.content[pos.row];
+  if (ln.size() <= pos.col)
+    return std::wstring();
+  int x0 = pos.col;
+  int x1 = pos.col;
+  while (x0 > 0 && valid_command_char(ln[x0]))
+    --x0;
+  while (x1 < ln.size() && valid_command_char(ln[x1]))
+    ++x1;
+  if (!valid_command_char(ln[x0]))
+    ++x0;
+  if (x0 > x1)
+    return std::wstring();
+  std::wstring out(ln.begin() + x0, ln.begin() + x1);
+  return clean_command(out);
+  }
+
+std::wstring find_bottom_line_help_command(int x, int y)
+  {
+  std::wstring command;
+  int x_start = (x / 10) * 10 + 2;
+  int x_end = x_start + 8;
+  int rows, cols;
+  getmaxyx(stdscr, rows, cols);
+  for (int i = x_start; i <= x_end && i < cols; ++i)
+    {
+    move(y, i);
+    wchar_t ch = (wchar_t)wgetch(stdscr);
+    command.push_back(ch);
+    }
+  return command;
+  }
+
+app_state execute(app_state state, const std::wstring& command, const settings& s)
+  {
+  return state;
+  }
+
+app_state load(app_state state, const std::wstring& command, const settings& s)
+  {
+  return state;
+  }
+
 screen_ex_pixel find_mouse_text_pick(int x, int y)
   {
   int rows, cols;
@@ -1634,6 +1717,11 @@ app_state mouse_motion(app_state state, int x, int y, const settings& s)
         state.command_buffer.pos = p.pos;
         }
       }
+    p = get_ex(y, x);
+    if (p.type == mouse.left_drag_start.type && p.type == SET_TEXT_OPERATION)
+      {
+      state.operation_buffer.pos = p.pos;
+      }
     }
   if (mouse.middle_dragging)
     {
@@ -1675,6 +1763,18 @@ app_state left_mouse_button_down(app_state state, int x, int y, bool double_clic
       state.command_buffer.rectangular_selection = false;
       }
     state.command_buffer.pos = mouse.left_drag_start.pos;
+    state.buffer = clear_selection(state.buffer);
+    keyb_data.selecting = false;
+    }
+  mouse.left_drag_start = get_ex(y, x);
+  if (mouse.left_drag_start.type == SET_TEXT_OPERATION)
+    {
+    if (!keyb_data.selecting)
+      {
+      state.operation_buffer.start_selection = mouse.left_drag_start.pos;
+      state.operation_buffer.rectangular_selection = false;
+      }
+    state.operation_buffer.pos = mouse.left_drag_start.pos;
     state.buffer = clear_selection(state.buffer);
     keyb_data.selecting = false;
     }
@@ -1734,6 +1834,9 @@ app_state left_mouse_button_up(app_state state, int x, int y, const settings& s)
 
 app_state middle_mouse_button_up(app_state state, int x, int y, const settings& s)
   {
+  mouse.middle_dragging = false;
+  mouse.middle_button_down = false;
+
   screen_ex_pixel p = get_ex(y, x);
   screen_ex_pixel p_left;
   if (x)
@@ -1757,11 +1860,32 @@ app_state middle_mouse_button_up(app_state state, int x, int y, const settings& 
     return state;
     }
 
+  if (p.type == SET_TEXT_EDITOR)
+    {
+    std::wstring command = find_command(state.buffer, p.pos, s);
+    return execute(state, command, s);
+    }
+
+  if (p.type == SET_TEXT_COMMAND)
+    {
+    std::wstring command = find_command(state.command_buffer, p.pos, s);
+    return execute(state, command, s);
+    }
+
+  if (p.type == SET_NONE)
+    {
+    std::wstring command = find_bottom_line_help_command(x, y);
+    return execute(state, command, s);
+    }
+
   return state;
   }
 
 app_state right_mouse_button_up(app_state state, int x, int y, const settings& s)
   {
+  mouse.right_dragging = false;
+  mouse.right_button_down = false;
+
   screen_ex_pixel p = get_ex(y, x);
 
   if (p.type == SET_SCROLLBAR_EDITOR)
@@ -1774,6 +1898,24 @@ app_state right_mouse_button_up(app_state state, int x, int y, const settings& s
     if (steps < 1)
       steps = 1;
     return move_editor_window_up_down(state, steps, s);
+    }
+
+  if (p.type == SET_TEXT_EDITOR)
+    {
+    std::wstring command = find_command(state.buffer, p.pos, s);
+    return load(state, command, s);
+    }
+
+  if (p.type == SET_TEXT_COMMAND)
+    {
+    std::wstring command = find_command(state.command_buffer, p.pos, s);
+    return load(state, command, s);
+    }
+
+  if (p.type == SET_NONE)
+    {
+    std::wstring command = find_bottom_line_help_command(x, y);
+    return load(state, command, s);
     }
   return state;
   }

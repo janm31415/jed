@@ -8,7 +8,8 @@ enum screen_ex_type
   SET_NONE,
   SET_SCROLLBAR_EDITOR,
   SET_TEXT_EDITOR,
-  SET_TEXT_COMMAND
+  SET_TEXT_COMMAND,
+  SET_TEXT_OPERATION
   };
 
 struct screen_ex_pixel

@@ -228,9 +228,8 @@ namespace
       }
     else
       {
-      assert(0); // todo
-      int nr_lines = maxrow - minrow + 1;
-      int current_line = 0;
+      int64_t nr_lines = maxrow - minrow + 1;
+      int64_t current_line = 0;
       while (!wtxt.empty() && current_line < nr_lines)
         {
         
@@ -240,14 +239,90 @@ namespace
         std::wstring wline = wtxt.substr(0, endline_position);
         wtxt.erase(0, endline_position);
 
+        if (!wline.empty() && wline.back() == L'\n')
+          wline.pop_back();
+
         line input;
         auto trans = input.transient();
         for (auto ch : wline)
           trans.push_back(ch);
         input = trans.persistent();
 
+        int64_t r = minrow + current_line;
+        auto ln = fb.content[r];
+        if (ln.size() > mincol)
+          {
+          ln = ln.take(mincol) + input + ln.drop(mincol);
+          }
+        fb.content = fb.content.set(r, ln);
         ++current_line;
         }
+      fb.start_selection = std::nullopt;
+      fb.rectangular_selection = false;
+      fb.pos.row = minrow;
+      fb.pos.col = mincol;
+      }
+
+    return fb;
+    }
+
+  file_buffer insert_rectangular(file_buffer fb, text txt, bool save_undo)
+    {
+    if (txt.empty())
+      return fb;
+
+    fb.modification_mask |= 1;
+
+    int64_t minrow, maxrow, mincol, maxcol;
+    get_rectangular_selection(minrow, maxrow, mincol, maxcol, *fb.start_selection, fb.pos);
+
+    bool single_line = txt.size() == 1;
+
+    if (single_line)
+      {
+      line input = txt[0];      
+
+      for (int64_t r = minrow; r <= maxrow; ++r)
+        {
+        auto ln = fb.content[r];
+        if (ln.size() > mincol)
+          {
+          ln = ln.take(mincol) + input + ln.drop(mincol);
+          }
+        fb.content = fb.content.set(r, ln);
+        }
+      fb.start_selection->row = minrow;
+      fb.pos.row = maxrow;
+      fb.start_selection->col = mincol + input.size();
+      fb.pos.col = fb.start_selection->col;
+      fb.rectangular_selection = true;
+      }
+    else
+      {
+      int64_t nr_lines = maxrow - minrow + 1;
+      int64_t current_line = 0;
+      int64_t txt_line = 0;
+      while (txt_line < txt.size() && current_line < nr_lines)
+        {
+        auto input = txt[txt_line];
+       
+        if (!input.empty() && input.back() == L'\n')
+          input = input.pop_back();
+
+        int64_t r = minrow + current_line;
+        auto ln = fb.content[r];
+        if (ln.size() > mincol)
+          {
+          ln = ln.take(mincol) + input + ln.drop(mincol);
+          }
+        fb.content = fb.content.set(r, ln);
+        ++current_line;
+        ++txt_line;
+        }
+      fb.start_selection = std::nullopt;
+      fb.rectangular_selection = false;
+      fb.pos.row = minrow;
+      fb.pos.col = mincol;
       }
 
     return fb;
@@ -323,8 +398,11 @@ file_buffer insert(file_buffer fb, text txt, bool save_undo)
   if (save_undo)
     fb = push_undo(fb);
 
-  if (has_selection(fb))
+  if (has_nontrivial_selection(fb))
     fb = erase(fb, false);
+
+  if (has_rectangular_selection(fb))
+    return insert_rectangular(fb, txt, false);
 
   fb.start_selection = std::nullopt;
 
