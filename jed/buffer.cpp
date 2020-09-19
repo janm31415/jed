@@ -411,6 +411,8 @@ text get_selection(file_buffer fb)
     }
   else
     {
+    p1 = fb.pos;
+    p2 = *fb.start_selection;
     int64_t mincol, maxcol, minrow, maxrow;
     get_rectangular_selection(minrow, maxrow, mincol, maxcol, p1, p2);
     for (int64_t r = minrow; r <= maxrow; ++r)

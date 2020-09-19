@@ -190,7 +190,7 @@ void draw_title_bar(app_state state)
 #define MULTILINEOFFSET 10
 
 
-bool in_selection(position current, position cursor, std::optional<position> start_selection, bool rectangular)
+bool in_selection(position current, position cursor, position buffer_pos, std::optional<position> start_selection, bool rectangular)
   {
   bool has_selection = start_selection != std::nullopt;
   if (has_selection)
@@ -200,8 +200,8 @@ bool in_selection(position current, position cursor, std::optional<position> sta
 
     int64_t mincol = start_selection->col;
     int64_t minrow = start_selection->row;
-    int64_t maxcol = cursor.col;
-    int64_t maxrow = cursor.row;
+    int64_t maxcol = buffer_pos.col;
+    int64_t maxrow = buffer_pos.row;
     if (maxcol < mincol)
       std::swap(maxcol, mincol);
     if (maxrow < minrow)
@@ -217,7 +217,7 @@ Returns an x offset (let's call it multiline_offset_x) such that
 equals the x position in the screen of where the next character should come.
 This makes it possible to further fill the line with spaces after calling "draw_line".
 */
-int draw_line(int& wide_characters_offset, line ln, position& current, position cursor, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s)
+int draw_line(int& wide_characters_offset, line ln, position& current, position cursor, position buffer_pos, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s)
   {
   int multiline_tag = (int)multiline_tag_editor;
   if (set_type == SET_TEXT_COMMAND)
@@ -226,6 +226,42 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
   wide_characters_offset = 0;
   bool has_selection = start_selection != std::nullopt;
   bool multiline = (cursor.row == current.row) && (ln.size() >= (maxcol - 1));
+  int64_t multiline_ref_col = cursor.col;
+
+  if (!multiline && has_selection)
+    {
+    if (!rectangular)
+      {
+      if (start_selection->row == current.row || cursor.row == current.row)
+        {
+        multiline_ref_col = ln.size();
+        if (start_selection->row == current.row && start_selection->col < multiline_ref_col)
+          multiline_ref_col = start_selection->col;
+        if (cursor.row == current.row && cursor.col < multiline_ref_col)
+          multiline_ref_col = cursor.col;
+        if (multiline_ref_col >= (maxcol - 1) && (multiline_ref_col < ln.size()))
+          multiline = true;
+        }
+      }
+    else
+      {
+      int64_t min_col = start_selection->col;
+      int64_t min_row = start_selection->row;
+      int64_t max_col = buffer_pos.col;
+      int64_t max_row = buffer_pos.row;
+      if (max_col < min_col)
+        std::swap(max_col, min_col);
+      if (max_row < min_row)
+        std::swap(max_row, min_row);
+      if (current.row >= min_row && current.row <= max_row)
+        {
+        multiline_ref_col = min_col;
+        if (multiline_ref_col >= (maxcol - 1) && (multiline_ref_col < ln.size()))
+          multiline = true;
+        }
+      }
+    }
+
 
   auto it = ln.begin();
   auto it_end = ln.end();
@@ -235,7 +271,7 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
   if (multiline)
     {
     int pagewidth = maxcol - 2 - MULTILINEOFFSET;
-    page = cursor.col / pagewidth;
+    page = multiline_ref_col / pagewidth;
     if (page != 0)
       {
       int offset = page * pagewidth - MULTILINEOFFSET / 2;
@@ -258,12 +294,12 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
     if (current.col >= maxcol)
       break;
 
-    if (active && in_selection(current, cursor, start_selection, rectangular))
+    if (active && in_selection(current, cursor, buffer_pos, start_selection, rectangular))
       attron(A_REVERSE);
     else
       attroff(A_REVERSE);
 
-    if (current == cursor)
+    if (!has_selection && (current == cursor))
       {
       attron(A_REVERSE);
       }
@@ -281,7 +317,7 @@ int draw_line(int& wide_characters_offset, line ln, position& current, position 
     ++current.col;
     }
 
-  if (!in_selection(current, cursor, start_selection, rectangular))
+  if (!in_selection(current, cursor, buffer_pos, start_selection, rectangular))
     attroff(A_REVERSE);
 
   if (multiline && (it != it_end) && (page != 0))
@@ -385,7 +421,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
   if (active)
     cursor = get_actual_position(fb);
 
-  bool has_selection = fb.start_selection != std::nullopt;
+  bool has_nontrivial_selection = (fb.start_selection != std::nullopt) && (fb.start_selection != fb.pos);
 
   attrset(COMMAND_COLOR);
 
@@ -422,10 +458,10 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, fb.pos, cursor, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
-    if ((current == cursor))
+    if (!has_nontrivial_selection && (current == cursor))
       {
       move((int)r + offset_y, x);
       assert(current.row == fb.content.size() - 1);
@@ -433,14 +469,16 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       attron(A_REVERSE);
       add_ex(current, SET_TEXT_COMMAND);
       addch(' ');
-      attroff(A_REVERSE);
       ++x;
+      ++current.col;
       }
+    attroff(A_REVERSE);
     for (; x < maxcol + offset_x; ++x)
       {
       move((int)r + offset_y, (int)x);
       add_ex(current, SET_TEXT_COMMAND);
       addch(' ');
+      ++current.col;
       }
 
     ++current.row;
@@ -465,15 +503,10 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
   if (active)
     cursor = get_actual_position(fb);
 
-  bool has_selection = fb.start_selection != std::nullopt;
+  bool has_nontrivial_selection = (fb.start_selection != std::nullopt) && (fb.start_selection != fb.pos);
 
 
   attrset(DEFAULT_COLOR);
-
-  //if (has_selection && fb.start_selection->row < scroll_row)
-  //  {
-  //  attron(A_REVERSE);
-  //  }
 
   int r = 0;
   for (; r < maxrow; ++r)
@@ -493,10 +526,10 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, fb.pos, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, s);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
-    if ((current == cursor))
+    if (!has_nontrivial_selection && (current == cursor))
       {
       move((int)r + offset_y, x);
       assert(current.row == fb.content.size() - 1);
@@ -504,15 +537,17 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       attron(A_REVERSE);
       add_ex(current, set_type);
       addch(' ');
-      attroff(A_REVERSE);
       ++x;
+      ++current.col;
       }
-
-    if (x < maxcol)
+    attroff(A_REVERSE);
+    while (x < maxcol)
       {
       move((int)r + offset_y, (int)x);
       add_ex(current, set_type);
       addch(' ');
+      ++current.col;
+      ++x;
       }
 
     ++current.row;
@@ -626,7 +661,7 @@ app_state draw(app_state state, const settings& s)
     int off_x = txt.length();
     int wide_chars_offset = 0;
     if (!state.operation_buffer.content.empty())
-      draw_line(wide_chars_offset, state.operation_buffer.content[0], current, cursor, DEFAULT_COLOR | A_BOLD, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_NONE, s);
+      draw_line(wide_chars_offset, state.operation_buffer.content[0], current, cursor, state.operation_buffer.pos, DEFAULT_COLOR | A_BOLD, rows - 3, off_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_NONE, s);
     if ((current == cursor))
       {
       move((int)rows - 3, (int)current.col + off_x + wide_chars_offset);
