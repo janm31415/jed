@@ -122,6 +122,35 @@ bool has_selection(file_buffer fb)
   return (fb.start_selection && (*fb.start_selection != fb.pos));
   }
 
+bool has_rectangular_selection(file_buffer fb)
+  {
+  return fb.rectangular_selection && has_selection(fb);
+  }
+
+bool has_trivial_rectangular_selection(file_buffer fb)
+  {
+  if (has_rectangular_selection(fb))
+    {
+    int64_t minrow, maxrow, mincol, maxcol;
+    get_rectangular_selection(minrow, maxrow, mincol, maxcol, *fb.start_selection, fb.pos);
+    return mincol == maxcol;
+    }
+  return false;
+  }
+
+bool has_nontrivial_selection(file_buffer fb)
+  {
+  if (has_selection(fb))
+    {
+    if (!fb.rectangular_selection)
+      return true;
+    int64_t minrow, maxrow, mincol, maxcol;
+    get_rectangular_selection(minrow, maxrow, mincol, maxcol, *fb.start_selection, fb.pos);
+    return mincol != maxcol;
+    }
+  return false;
+  }
+
 file_buffer start_selection(file_buffer fb)
   {
   fb.start_selection = get_actual_position(fb);
@@ -148,13 +177,93 @@ file_buffer push_undo(file_buffer fb)
   return fb;
   }
 
+void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_col, int64_t& max_col, position p1, position p2)
+  {
+  min_col = p1.col;
+  min_row = p1.row;
+  max_col = p2.col;
+  max_row = p2.row;
+  if (max_col < min_col)
+    std::swap(max_col, min_col);
+  if (max_row < min_row)
+    std::swap(max_row, min_row);
+  }
+
+
+namespace
+  {
+  file_buffer insert_rectangular(file_buffer fb, const std::string& txt, bool save_undo)
+    {
+    fb.modification_mask |= 1;
+
+    int64_t minrow, maxrow, mincol, maxcol;
+    get_rectangular_selection(minrow, maxrow, mincol, maxcol, *fb.start_selection, fb.pos);
+
+    std::wstring wtxt = jtk::convert_string_to_wstring(txt);
+
+    bool single_line = wtxt.find_first_of(L'\n') == std::wstring::npos;
+
+    if (single_line)
+      {
+      line input;
+      auto trans = input.transient();
+      for (auto ch : wtxt)
+        trans.push_back(ch);
+      input = trans.persistent();
+
+      for (int64_t r = minrow; r <= maxrow; ++r)
+        {
+        auto ln = fb.content[r];
+        if (ln.size() > mincol)
+          {
+          ln = ln.take(mincol) + input + ln.drop(mincol);
+          }
+        fb.content = fb.content.set(r, ln);
+        }
+      fb.start_selection->row = minrow;
+      fb.pos.row = maxrow;
+      fb.start_selection->col = mincol + input.size();
+      fb.pos.col = fb.start_selection->col;
+      fb.rectangular_selection = true;
+      }
+    else
+      {
+      assert(0); // todo
+      int nr_lines = maxrow - minrow + 1;
+      int current_line = 0;
+      while (!wtxt.empty() && current_line < nr_lines)
+        {
+        
+        auto endline_position = wtxt.find_first_of(L'\n');
+        if (endline_position != std::wstring::npos)
+          ++endline_position;
+        std::wstring wline = wtxt.substr(0, endline_position);
+        wtxt.erase(0, endline_position);
+
+        line input;
+        auto trans = input.transient();
+        for (auto ch : wline)
+          trans.push_back(ch);
+        input = trans.persistent();
+
+        ++current_line;
+        }
+      }
+
+    return fb;
+    }
+  }
+
 file_buffer insert(file_buffer fb, const std::string& txt, bool save_undo)
   {
   if (save_undo)
     fb = push_undo(fb);
 
-  if (has_selection(fb))
+  if (has_nontrivial_selection(fb))
     fb = erase(fb, false);
+
+  if (has_rectangular_selection(fb))
+    return insert_rectangular(fb, txt, false);
 
   fb.start_selection = std::nullopt;
 
@@ -260,21 +369,6 @@ file_buffer insert(file_buffer fb, text txt, bool save_undo)
   return fb;
   }
 
-namespace
-  {
-  void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_col, int64_t& max_col, position p1, position p2)
-    {
-    min_col = p1.col;
-    min_row = p1.row;
-    max_col = p2.col;
-    max_row = p2.row;
-    if (max_col < min_col)
-      std::swap(max_col, min_col);
-    if (max_row < min_row)
-      std::swap(max_row, min_row);
-    }
-  }
-
 file_buffer erase(file_buffer fb, bool save_undo)
   {
   if (fb.content.empty())
@@ -335,14 +429,31 @@ file_buffer erase(file_buffer fb, bool save_undo)
         }
       else
         {
+        p1 = fb.pos;
+        p2 = *fb.start_selection;
         int64_t mincol, maxcol, minrow, maxrow;
         get_rectangular_selection(minrow, maxrow, mincol, maxcol, p1, p2);
-        for (int64_t r = minrow; r <= maxrow; ++r)
+        if (mincol == maxcol) // trivial rectangular selection
           {
-          fb.content = fb.content.set(r, fb.content[r].take(mincol) + fb.content[r].drop(maxcol + 1));
+          if (mincol > 0)
+            {
+            for (int64_t r = minrow; r <= maxrow; ++r)
+              {
+              fb.content = fb.content.set(r, fb.content[r].take(mincol - 1) + fb.content[r].drop(maxcol));
+              }
+            fb.start_selection->col = mincol - 1;
+            fb.pos.col = mincol - 1;
+            }
           }
-        fb.start_selection->col = mincol;
-        fb.pos.col = mincol;
+        else
+          {
+          for (int64_t r = minrow; r <= maxrow; ++r)
+            {
+            fb.content = fb.content.set(r, fb.content[r].take(mincol) + fb.content[r].drop(maxcol + 1));
+            }
+          fb.start_selection->col = mincol;
+          fb.pos.col = mincol;
+          }
         }
       }
     }
@@ -370,10 +481,28 @@ file_buffer erase_right(file_buffer fb, bool save_undo)
       auto l = fb.content[pos.row].pop_back() + fb.content[pos.row + 1];
       fb.content = fb.content.erase(pos.row + 1).set(pos.row, l);
       }
+    fb.start_selection = std::nullopt;
+    fb.pos = pos;
     return fb;
     }
   else
+    {
+    if (has_trivial_rectangular_selection(fb))
+      {
+      position p1 = fb.pos;
+      position p2 = *fb.start_selection;
+      int64_t mincol, maxcol, minrow, maxrow;
+      get_rectangular_selection(minrow, maxrow, mincol, maxcol, p1, p2);
+      for (int64_t r = minrow; r <= maxrow; ++r)
+        {
+        fb.content = fb.content.set(r, fb.content[r].take(mincol) + fb.content[r].drop(maxcol+1));
+        }
+      fb.start_selection->col = mincol;
+      fb.pos.col = mincol;
+      return fb;
+      }
     return erase(fb, false);
+    }
   }
 
 text get_selection(file_buffer fb)

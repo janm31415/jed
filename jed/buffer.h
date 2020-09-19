@@ -70,6 +70,14 @@ struct file_buffer
 
 bool has_selection(file_buffer fb);
 
+bool has_rectangular_selection(file_buffer fb);
+
+bool has_trivial_rectangular_selection(file_buffer fb);
+
+bool has_nontrivial_selection(file_buffer fb);
+
+void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_col, int64_t& max_col, position p1, position p2);
+
 position get_actual_position(file_buffer fb);
 
 file_buffer make_empty_buffer();
