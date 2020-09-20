@@ -9,6 +9,9 @@
 
 #include <jtk/file_utils.h>
 
+#include <map>
+#include <functional>
+
 #include <SDL.h>
 #include <SDL_syswm.h>
 #include <curses.h>
@@ -433,7 +436,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       move((int)r + offset_y, (int)x);
       add_ex(current, SET_TEXT_COMMAND);
       addch(' ');
-      }    
+      }
     if (current.row >= fb.content.size())
       {
       int x = 0;
@@ -647,7 +650,7 @@ app_state draw(app_state state, const settings& s)
     current.col = 0;
     current.row = 0;
     std::string txt = get_operation_text(state.operation);
-    move((int)rows - 3, 0);    
+    move((int)rows - 3, 0);
     attrset(DEFAULT_COLOR);
     attron(A_BOLD);
     for (auto ch : txt)
@@ -674,7 +677,7 @@ app_state draw(app_state state, const settings& s)
     attroff(A_REVERSE);
     while (x < maxcol)
       {
-      move((int)rows-3, (int)x);
+      move((int)rows - 3, (int)x);
       add_ex(current, SET_TEXT_OPERATION);
       addch(' ');
       ++current.col;
@@ -1363,11 +1366,6 @@ app_state save_file(app_state state)
   return state;
   }
 
-std::optional<app_state> exit(app_state state)
-  {
-  return std::nullopt;
-  }
-
 app_state make_new_buffer(app_state state)
   {
   state.buffer = make_empty_buffer();
@@ -1387,7 +1385,7 @@ std::optional<app_state> ret_operation(app_state state, const settings& s)
       case op_save: state = save_file(state); break;
       case op_query_save: state = save_file(state); break;
       case op_new: state = make_new_buffer(state); break;
-      case op_exit: return exit(state);
+      case op_exit: return std::nullopt;
       default: break;
       }
     if (state.operation_stack.empty())
@@ -1427,14 +1425,14 @@ app_state clear_operation_buffer(app_state state)
   return state;
   }
 
-app_state make_save_buffer(app_state state)
+std::optional<app_state> make_save_buffer(app_state state)
   {
   state = clear_operation_buffer(state);
   state.operation_buffer = insert(state.operation_buffer, state.buffer.name, false);
   return state;
   }
 
-app_state new_buffer(app_state state)
+std::optional<app_state> command_new(app_state state, const settings& s)
   {
   if ((state.buffer.modification_mask & 1) == 1)
     {
@@ -1445,18 +1443,24 @@ app_state new_buffer(app_state state)
   return make_new_buffer(state);
   }
 
-std::optional<app_state> cancel(app_state state)
+std::optional<app_state> command_exit(app_state state, const settings& s)
+  {
+  state.operation = op_editing;
+  if ((state.buffer.modification_mask & 1) == 1)
+    {
+    state.operation = op_query_save;
+    state.operation_stack.push_back(op_exit);
+    return make_save_buffer(state);
+    }
+  else
+    return std::nullopt;
+  }
+
+std::optional<app_state> command_cancel(app_state state, const settings& s)
   {
   if (state.operation == op_editing || state.operation == op_command_editing)
     {
-    if ((state.buffer.modification_mask & 1) == 1)
-      {
-      state.operation = op_query_save;
-      state.operation_stack.push_back(op_exit);
-      return make_save_buffer(state);
-      }
-    else
-      return exit(state);
+    return command_exit(state, s);
     }
   else
     {
@@ -1468,7 +1472,7 @@ std::optional<app_state> cancel(app_state state)
   return state;
   }
 
-app_state stop_selection(app_state state)
+std::optional<app_state> stop_selection(app_state state)
   {
   if (keyb_data.selecting)
     {
@@ -1477,7 +1481,7 @@ app_state stop_selection(app_state state)
   return state;
   }
 
-app_state undo(app_state state, const settings& s)
+std::optional<app_state> command_undo(app_state state, const settings& s)
   {
   if (state.operation == op_editing)
     state.buffer = undo(state.buffer);
@@ -1488,7 +1492,7 @@ app_state undo(app_state state, const settings& s)
   return check_scroll_position(state, s);
   }
 
-app_state redo(app_state state, const settings& s)
+std::optional<app_state> command_redo(app_state state, const settings& s)
   {
   if (state.operation == op_editing)
     state.buffer = redo(state.buffer);
@@ -1499,7 +1503,7 @@ app_state redo(app_state state, const settings& s)
   return check_scroll_position(state, s);
   }
 
-app_state copy_to_snarf_buffer(app_state state)
+std::optional<app_state> command_copy_to_snarf_buffer(app_state state, const settings& s)
   {
   if (state.operation == op_editing)
     state.snarf_buffer = get_selection(state.buffer);
@@ -1519,7 +1523,7 @@ app_state copy_to_snarf_buffer(app_state state)
   return state;
   }
 
-app_state paste_from_snarf_buffer(app_state state, const settings& s)
+std::optional<app_state> command_paste_from_snarf_buffer(app_state state, const settings& s)
   {
 #ifdef _WIN32
   auto txt = get_text_from_windows_clipboard();
@@ -1552,7 +1556,7 @@ app_state paste_from_snarf_buffer(app_state state, const settings& s)
   return state;
   }
 
-app_state select_all(app_state state, const settings& s)
+std::optional<app_state> command_select_all(app_state state, const settings& s)
   {
   if (state.operation == op_editing)
     {
@@ -1569,7 +1573,7 @@ app_state select_all(app_state state, const settings& s)
   return state;
   }
 
-app_state make_help_buffer(app_state state)
+std::optional<app_state> make_help_buffer(app_state state)
   {
   std::string help_file = get_file_in_executable_path("Help.txt");
   state = clear_operation_buffer(state);
@@ -1586,11 +1590,11 @@ app_state make_help_buffer(app_state state)
   return state;
   }
 
-app_state move_editor_window_up_down(app_state state, int steps, const settings& s)
+std::optional<app_state> move_editor_window_up_down(app_state state, int steps, const settings& s)
   {
   int rows, cols;
-  get_editor_window_size(rows, cols, s); 
-  state.scroll_row += steps;  
+  get_editor_window_size(rows, cols, s);
+  state.scroll_row += steps;
   int64_t lastrow = (int64_t)state.buffer.content.size() - 1;
   if (lastrow < 0)
     lastrow = 0;
@@ -1656,21 +1660,90 @@ std::wstring find_bottom_line_help_command(int x, int y)
   int x_end = x_start + 8;
   int rows, cols;
   getmaxyx(stdscr, rows, cols);
-  for (int i = x_start; i <= x_end && i < cols; ++i)
+  for (int i = x_start; i < x_end && i < cols; ++i)
     {
     move(y, i);
-    wchar_t ch = (wchar_t)wgetch(stdscr);
-    command.push_back(ch);
+    chtype ch;
+    winchnstr(stdscr, &ch, 1);
+    command.push_back((wchar_t)(ch&A_CHARTEXT));
     }
-  return command;
+  return clean_command(command);
   }
 
-app_state execute(app_state state, const std::wstring& command, const settings& s)
+std::optional<app_state> command_save(app_state state, const settings& s)
   {
+  state.operation = op_save;
+  return make_save_buffer(state);
+  }
+
+std::optional<app_state> command_open(app_state state, const settings& s)
+  {
+  state.operation = op_open;
+  return clear_operation_buffer(state);
+  }
+
+std::optional<app_state> command_help(app_state state, const settings& s)
+  {
+  state.operation = op_help;
+  return make_help_buffer(state);
+  }
+
+std::optional<app_state> command_yes(app_state state, const settings& s)
+  {
+  switch (state.operation)
+    {
+    case op_query_save:
+    {
+    state.operation = op_save;
+    return ret(state, s);
+    }
+    default: return state;
+    }
+  }
+
+std::optional<app_state> command_no(app_state state, const settings& s)
+  {
+  switch (state.operation)
+    {
+    case op_query_save:
+    {
+    state.operation = state.operation_stack.back();
+    state.operation_stack.pop_back();
+    return ret(state, s);
+    }
+    default: return state;
+    }
+  }
+
+const auto executable_commands = std::map<std::wstring, std::function<std::optional<app_state>(app_state, const settings&)>>
+  {
+  {L"Back", command_cancel},
+  {L"Cancel", command_cancel},
+  {L"Copy", command_copy_to_snarf_buffer},
+  {L"Exit", command_exit},
+  {L"Help", command_help},
+  {L"New", command_new},
+  {L"No", command_no},
+  {L"Open", command_open},
+  {L"Paste", command_paste_from_snarf_buffer},
+  {L"Redo", command_redo},
+  {L"Save", command_save},
+  {L"Sel/all", command_select_all},
+  {L"Undo", command_undo},
+  {L"Yes", command_yes}
+  };
+
+std::optional<app_state> execute(app_state state, const std::wstring& command, const settings& s)
+  {
+  auto it = executable_commands.find(command);
+  if (it != executable_commands.end())
+    {
+    return it->second(state, s);
+    }
   return state;
   }
 
-app_state load(app_state state, const std::wstring& command, const settings& s)
+std::optional<app_state> load(app_state state, const std::wstring& command, const settings& s)
   {
   return state;
   }
@@ -1693,7 +1766,7 @@ screen_ex_pixel find_mouse_text_pick(int x, int y)
   return p;
   }
 
-app_state mouse_motion(app_state state, int x, int y, const settings& s)
+std::optional<app_state> mouse_motion(app_state state, int x, int y, const settings& s)
   {
   if (mouse.left_button_down)
     mouse.left_dragging = true;
@@ -1738,12 +1811,12 @@ app_state mouse_motion(app_state state, int x, int y, const settings& s)
   return state;
   }
 
-app_state left_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
+std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
   mouse.left_button_down = true;
   mouse.left_drag_start = find_mouse_text_pick(x, y);
   if (mouse.left_drag_start.type == SET_TEXT_EDITOR)
-    {    
+    {
     state.operation = op_editing;
     if (!keyb_data.selecting)
       {
@@ -1781,23 +1854,23 @@ app_state left_mouse_button_down(app_state state, int x, int y, bool double_clic
   return state;
   }
 
-app_state middle_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
+std::optional<app_state> middle_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
   mouse.middle_button_down = true;
   mouse.middle_drag_start = find_mouse_text_pick(x, y);
   return state;
   }
 
-app_state right_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
+std::optional<app_state> right_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
   mouse.right_button_down = true;
   mouse.right_drag_start = find_mouse_text_pick(x, y);
   return state;
   }
 
-app_state left_mouse_button_up(app_state state, int x, int y, const settings& s)
+std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, const settings& s)
   {
-  mouse.left_dragging = false;    
+  mouse.left_dragging = false;
   mouse.left_button_down = false;
 
   screen_ex_pixel p = get_ex(y, x);
@@ -1811,7 +1884,7 @@ app_state left_mouse_button_up(app_state state, int x, int y, const settings& s)
     int steps = (int)(fraction * rows);
     if (steps < 1)
       steps = 1;
-    return move_editor_window_up_down(state, -steps, s);    
+    return move_editor_window_up_down(state, -steps, s);
     }
 
   p = find_mouse_text_pick(x, y);
@@ -1832,7 +1905,7 @@ app_state left_mouse_button_up(app_state state, int x, int y, const settings& s)
   return state;
   }
 
-app_state middle_mouse_button_up(app_state state, int x, int y, const settings& s)
+std::optional<app_state> middle_mouse_button_up(app_state state, int x, int y, const settings& s)
   {
   mouse.middle_dragging = false;
   mouse.middle_button_down = false;
@@ -1881,7 +1954,7 @@ app_state middle_mouse_button_up(app_state state, int x, int y, const settings& 
   return state;
   }
 
-app_state right_mouse_button_up(app_state state, int x, int y, const settings& s)
+std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, const settings& s)
   {
   mouse.right_dragging = false;
   mouse.right_button_down = false;
@@ -2048,7 +2121,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            return select_all(state, s);
+            return command_select_all(state, s);
             }
           break;
           }
@@ -2056,7 +2129,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            return copy_to_snarf_buffer(state);
+            return command_copy_to_snarf_buffer(state, s);
             }
           break;
           }
@@ -2064,8 +2137,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            state.operation = op_help;
-            return make_help_buffer(state);
+            return command_help(state, s);
             }
           break;
           }
@@ -2077,11 +2149,9 @@ std::optional<app_state> process_input(app_state state, settings& s)
               {
               case op_query_save:
               {
-              state.operation = state.operation_stack.back();
-              state.operation_stack.pop_back();
-              return ret(state, s);
+              return command_no(state, s);
               }
-              default: return new_buffer(state);
+              default: return command_new(state, s);
               }
             }
           break;
@@ -2090,8 +2160,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            state.operation = op_open;
-            return clear_operation_buffer(state);
+            return command_open(state, s);
             }
           break;
           }
@@ -2099,8 +2168,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            state.operation = op_save;
-            return make_save_buffer(state);
+            return command_save(state, s);
             }
           break;
           }
@@ -2108,7 +2176,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            return paste_from_snarf_buffer(state, s);
+            return command_paste_from_snarf_buffer(state, s);
             }
           break;
           }
@@ -2116,7 +2184,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            return cancel(state);
+            return command_cancel(state, s);
             }
           break;
           }
@@ -2126,12 +2194,8 @@ std::optional<app_state> process_input(app_state state, settings& s)
             {
             switch (state.operation)
               {
-              case op_query_save:
-              {
-              state.operation = op_save;
-              return ret(state, s);
-              }
-              default: return redo(state, s);
+              case op_query_save: return command_yes(state, s);
+              default: return command_redo(state, s);
               }
             }
           break;
@@ -2140,7 +2204,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            return undo(state, s);
+            return command_undo(state, s);
             }
           break;
           }
@@ -2221,14 +2285,13 @@ std::optional<app_state> process_input(app_state state, settings& s)
           int steps = s.mouse_scroll_steps;
           if (event.wheel.y > 0)
             steps = -steps;
-          return move_editor_window_up_down(state, steps, s);          
+          return move_editor_window_up_down(state, steps, s);
           }
         break;
         }
-        case SDL_QUIT: 
+        case SDL_QUIT:
         {
-        state.operation = op_editing;
-        return cancel(state);
+        return command_exit(state, s);
         }
         } // switch (event.type)
       }
@@ -2287,7 +2350,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   resize_term(state.h / font_height, state.w / font_width);
   resize_term_ex(state.h / font_height, state.w / font_width);
 
-    }
+  }
 
 engine::~engine()
   {

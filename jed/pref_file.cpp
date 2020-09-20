@@ -252,7 +252,7 @@ void pref_file::release()
     std::ofstream o(filename);
     if (o.is_open())
       {
-      o << *(node->j);
+      o << node->j->dump(2);
       o.close();
       }
     }
