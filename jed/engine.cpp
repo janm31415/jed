@@ -1,10 +1,11 @@
 #include "engine.h"
+#include "active_folder.h"
 #include "clipboard.h"
-
 #include "colors.h"
 #include "keyboard.h"
 #include "mouse.h"
 #include "pdcex.h"
+#include "process.h"
 #include "utils.h"
 
 #include <jtk/file_utils.h>
@@ -1432,7 +1433,7 @@ std::optional<app_state> make_save_buffer(app_state state)
   return state;
   }
 
-std::optional<app_state> command_new(app_state state, const settings& s)
+std::optional<app_state> command_new(app_state state, settings& s)
   {
   if ((state.buffer.modification_mask & 1) == 1)
     {
@@ -1443,7 +1444,7 @@ std::optional<app_state> command_new(app_state state, const settings& s)
   return make_new_buffer(state);
   }
 
-std::optional<app_state> command_exit(app_state state, const settings& s)
+std::optional<app_state> command_exit(app_state state, settings& s)
   {
   state.operation = op_editing;
   if ((state.buffer.modification_mask & 1) == 1)
@@ -1456,7 +1457,7 @@ std::optional<app_state> command_exit(app_state state, const settings& s)
     return std::nullopt;
   }
 
-std::optional<app_state> command_cancel(app_state state, const settings& s)
+std::optional<app_state> command_cancel(app_state state, settings& s)
   {
   if (state.operation == op_editing || state.operation == op_command_editing)
     {
@@ -1481,7 +1482,7 @@ std::optional<app_state> stop_selection(app_state state)
   return state;
   }
 
-std::optional<app_state> command_undo(app_state state, const settings& s)
+std::optional<app_state> command_undo(app_state state, settings& s)
   {
   if (state.operation == op_editing)
     state.buffer = undo(state.buffer);
@@ -1492,7 +1493,7 @@ std::optional<app_state> command_undo(app_state state, const settings& s)
   return check_scroll_position(state, s);
   }
 
-std::optional<app_state> command_redo(app_state state, const settings& s)
+std::optional<app_state> command_redo(app_state state, settings& s)
   {
   if (state.operation == op_editing)
     state.buffer = redo(state.buffer);
@@ -1503,7 +1504,7 @@ std::optional<app_state> command_redo(app_state state, const settings& s)
   return check_scroll_position(state, s);
   }
 
-std::optional<app_state> command_copy_to_snarf_buffer(app_state state, const settings& s)
+std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings& s)
   {
   if (state.operation == op_editing)
     state.snarf_buffer = get_selection(state.buffer);
@@ -1523,7 +1524,7 @@ std::optional<app_state> command_copy_to_snarf_buffer(app_state state, const set
   return state;
   }
 
-std::optional<app_state> command_paste_from_snarf_buffer(app_state state, const settings& s)
+std::optional<app_state> command_paste_from_snarf_buffer(app_state state, settings& s)
   {
 #ifdef _WIN32
   auto txt = get_text_from_windows_clipboard();
@@ -1556,7 +1557,7 @@ std::optional<app_state> command_paste_from_snarf_buffer(app_state state, const 
   return state;
   }
 
-std::optional<app_state> command_select_all(app_state state, const settings& s)
+std::optional<app_state> command_select_all(app_state state, settings& s)
   {
   if (state.operation == op_editing)
     {
@@ -1608,7 +1609,7 @@ std::optional<app_state> move_editor_window_up_down(app_state state, int steps, 
 
 bool valid_command_char(wchar_t ch)
   {
-  return (ch != L' ' && ch != L'\n' && ch != L'\r');
+  return (ch != L' ' && ch != L'\n' && ch != L'\r' && ch != L'\t');
   }
 
 std::wstring clean_command(std::wstring command)
@@ -1670,25 +1671,25 @@ std::wstring find_bottom_line_help_command(int x, int y)
   return clean_command(command);
   }
 
-std::optional<app_state> command_save(app_state state, const settings& s)
+std::optional<app_state> command_save(app_state state, settings& s)
   {
   state.operation = op_save;
   return make_save_buffer(state);
   }
 
-std::optional<app_state> command_open(app_state state, const settings& s)
+std::optional<app_state> command_open(app_state state, settings& s)
   {
   state.operation = op_open;
   return clear_operation_buffer(state);
   }
 
-std::optional<app_state> command_help(app_state state, const settings& s)
+std::optional<app_state> command_help(app_state state, settings& s)
   {
   state.operation = op_help;
   return make_help_buffer(state);
   }
 
-std::optional<app_state> command_yes(app_state state, const settings& s)
+std::optional<app_state> command_yes(app_state state, settings& s)
   {
   switch (state.operation)
     {
@@ -1701,7 +1702,7 @@ std::optional<app_state> command_yes(app_state state, const settings& s)
     }
   }
 
-std::optional<app_state> command_no(app_state state, const settings& s)
+std::optional<app_state> command_no(app_state state, settings& s)
   {
   switch (state.operation)
     {
@@ -1715,8 +1716,39 @@ std::optional<app_state> command_no(app_state state, const settings& s)
     }
   }
 
-const auto executable_commands = std::map<std::wstring, std::function<std::optional<app_state>(app_state, const settings&)>>
+std::optional<app_state> command_show_all_characters(app_state state, settings& s)
   {
+  s.show_all_characters = !s.show_all_characters;
+  return state;
+  }
+
+std::optional<app_state> command_tab_2(app_state state, settings& s)
+  {
+  s.tab_space = 2;
+  return state;
+  }
+
+std::optional<app_state> command_tab_4(app_state state, settings& s)
+  {
+  s.tab_space = 4;
+  return state;
+  }
+
+std::optional<app_state> command_tab_8(app_state state, settings& s)
+  {
+  s.tab_space = 8;
+  return state;
+  }
+
+std::optional<app_state> command_tab_spaces(app_state state, settings& s)
+  {
+  s.use_spaces_for_tab = !s.use_spaces_for_tab;
+  return state;
+  }
+
+const auto executable_commands = std::map<std::wstring, std::function<std::optional<app_state>(app_state, settings&)>>
+  {
+  {L"AllChars", command_show_all_characters},
   {L"Back", command_cancel},
   {L"Cancel", command_cancel},
   {L"Copy", command_copy_to_snarf_buffer},
@@ -1729,17 +1761,106 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Redo", command_redo},
   {L"Save", command_save},
   {L"Sel/all", command_select_all},
+  {L"TabSpaces", command_tab_spaces},
+  {L"Tab2", command_tab_2},
+  {L"Tab4", command_tab_4},
+  {L"Tab8", command_tab_8},
   {L"Undo", command_undo},
   {L"Yes", command_yes}
   };
 
-std::optional<app_state> execute(app_state state, const std::wstring& command, const settings& s)
+void split_command(std::wstring& first, std::wstring& remainder, const std::wstring& command)
+  {
+  first.clear();
+  remainder.clear();
+  auto pos = command.find_first_of(L' ');
+  if (pos == std::wstring::npos)
+    {
+    first = command;
+    return;
+    }
+
+  auto pos_quote = command.find_first_of(L'"');
+  if (pos < pos_quote)
+    {
+    first = command.substr(0, pos);
+    remainder = command.substr(pos);
+    return;
+    }
+
+  auto pos_quote_2 = pos_quote + 1;
+  while (pos_quote_2 < command.size() && command[pos_quote_2] != L'"')
+    ++pos_quote_2;
+  if (pos_quote_2 + 1 == command.size())
+    {
+    first = command;
+    return;
+    }
+  first = command.substr(0, pos_quote_2 + 1);
+  remainder = command.substr(pos_quote_2 + 1);
+  }
+
+char** alloc_arguments(const std::string& path, const std::vector<std::string>& parameters)
+  {
+  char** argv = new char*[parameters.size() + 2];
+  argv[0] = const_cast<char*>(path.c_str());
+  for (int j = 0; j < parameters.size(); ++j)
+    argv[j + 1] = const_cast<char*>(parameters[j].c_str());
+  argv[parameters.size() + 1] = nullptr;
+  return argv;
+  }
+
+void free_arguments(char** argv)
+  {
+  delete[] argv;
+  }
+
+std::optional<app_state> execute(app_state state, const std::wstring& command, settings& s)
   {
   auto it = executable_commands.find(command);
   if (it != executable_commands.end())
     {
     return it->second(state, s);
     }
+
+  std::wstring cmd_id, cmd_remainder;
+  split_command(cmd_id, cmd_remainder, command);
+
+  auto file_path = get_file_path(jtk::convert_wstring_to_string(cmd_id), state.buffer.name);
+
+  if (file_path.empty())
+    return state;
+
+  std::vector<std::string> parameters;
+  while (!cmd_remainder.empty())
+    {
+    cmd_remainder = clean_command(cmd_remainder);
+    std::wstring first, rest;
+    split_command(first, rest, cmd_remainder);
+    auto par_path = get_file_path(jtk::convert_wstring_to_string(first), state.buffer.name);
+    if (par_path.empty())
+      parameters.push_back(jtk::convert_wstring_to_string(first));
+    else
+      parameters.push_back(par_path);
+    cmd_remainder = clean_command(rest);
+    }
+
+  active_folder af(jtk::get_folder(state.buffer.name).c_str());
+
+  char** argv = alloc_arguments(file_path, parameters);
+#ifdef _WIN32
+  void* process = nullptr;
+#else
+  pid_t process;
+#endif
+  int err = run_process(file_path.c_str(), argv, nullptr, &process);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    }
+  destroy_process(process, 0);
   return state;
   }
 
@@ -1905,7 +2026,7 @@ std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, con
   return state;
   }
 
-std::optional<app_state> middle_mouse_button_up(app_state state, int x, int y, const settings& s)
+std::optional<app_state> middle_mouse_button_up(app_state state, int x, int y, settings& s)
   {
   mouse.middle_dragging = false;
   mouse.middle_button_down = false;

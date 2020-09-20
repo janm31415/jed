@@ -155,3 +155,54 @@ uint16_t ascii_to_utf16(unsigned char ch)
   static std::vector<uint16_t> m = build_ascii_to_utf16_vector();
   return m[ch];
   }
+
+std::string get_file_path(const std::string& filename, const std::string& buffer_filename)
+  {
+  if (!jtk::get_folder(filename).empty())
+    {
+    if (jtk::file_exists(filename))
+      return filename;
+    }
+  if (!buffer_filename.empty())
+    {
+    auto window_folder = jtk::get_folder(buffer_filename);
+    auto possible_executables = jtk::get_files_from_directory(window_folder, false);
+    for (const auto& path : possible_executables)
+      {
+      auto f = jtk::get_filename(path);
+      if (f == filename || jtk::remove_extension(f) == filename)
+        {
+        return path;
+        }
+      }
+    }
+  auto executable_path = jtk::get_folder(jtk::get_executable_path());
+  auto possible_executables = jtk::get_files_from_directory(executable_path, false);
+  for (const auto& path : possible_executables)
+    {
+    auto f = jtk::get_filename(path);
+    if (f == filename || jtk::remove_extension(f) == filename)
+      {
+      return path;
+      }
+    }
+#ifdef _WIN32
+  wchar_t buf[MAX_PATH];
+  GetCurrentDirectoryW(MAX_PATH, buf);
+  std::string dir = jtk::convert_wstring_to_string(std::wstring(buf));
+#else
+  char buf[PATH_MAX];
+  getcwd(buf, sizeof(buf));
+  std::string dir(buf);
+#endif
+  possible_executables = jtk::get_files_from_directory(dir, false);
+  for (const auto& path : possible_executables)
+    {
+    auto f = jtk::get_filename(path);
+    if (f == filename || jtk::remove_extension(f) == filename)
+      {
+      return path;
+      }
+    }
+  return "";
+  }

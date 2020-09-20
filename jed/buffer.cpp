@@ -28,10 +28,11 @@ file_buffer read_from_file(const std::string& filename)
     std::string wfilename(filename);
 #endif
     auto f = std::ifstream{ wfilename };
-    auto trans_lines = fb.content.transient();
-    std::string file_line;
-    while (std::getline(f, file_line))
+    auto trans_lines = fb.content.transient();    
+    while (!f.eof())
       {
+      std::string file_line;
+      std::getline(f, file_line);
       auto trans = line().transient();
       auto it = file_line.begin();
       auto it_end = file_line.end();
