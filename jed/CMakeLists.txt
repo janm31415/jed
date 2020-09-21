@@ -28,6 +28,7 @@ buffer.h
 clipboard.h
 colors.h
 engine.h
+jedicon.h
 keyboard.h
 mouse.h
 pdcex.h
@@ -42,6 +43,7 @@ buffer.cpp
 clipboard.cpp
 colors.cpp
 engine.cpp
+jedicon.cpp
 keyboard.cpp
 main.cpp
 mouse.cpp

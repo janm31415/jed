@@ -17,6 +17,7 @@ settings::settings()
   command_text = "New Open Save Exit";
   font_size = 17;
   mouse_scroll_steps = 3;
+  last_active_folder = "";
 
   color_editor_text = 0xffc0c0c0;
   color_editor_background = 0xff000000;
@@ -47,6 +48,7 @@ void update_settings(settings& s, const char* filename)
   f["y"] >> s.y;
   f["font_size"] >> s.font_size;
   f["mouse_scroll_steps"] >> s.mouse_scroll_steps;
+  f["last_active_folder"] >> s.last_active_folder;
 
   f["color_editor_text"] >> s.color_editor_text;
   f["color_editor_background"] >> s.color_editor_background;
@@ -84,6 +86,7 @@ void write_settings(const settings& s, const char* filename)
   f << "y" << s.y;
   f << "font_size" << s.font_size;
   f << "mouse_scroll_steps" << s.mouse_scroll_steps;
+  f << "last_active_folder" << s.last_active_folder;
 
   f << "color_editor_text" << s.color_editor_text;
   f << "color_editor_background" << s.color_editor_background;

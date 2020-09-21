@@ -2687,32 +2687,45 @@ std::optional<app_state> process_input(app_state state, settings& s)
         int y = event.button.y / font_height;
         bool double_click = event.button.clicks > 1;
         if (event.button.button == 1)
-          return left_mouse_button_down(state, x, y, double_click, s);
+          {
+          if (mouse.right_button_down)
+            {
+            mouse.left_button_down = false;
+            mouse.right_button_down = false;
+            mouse.left_dragging = false;
+            return middle_mouse_button_down(state, x, y, false, s);
+            }
+          else
+            return left_mouse_button_down(state, x, y, double_click, s);
+          }
         else if (event.button.button == 2)
           return middle_mouse_button_down(state, x, y, double_click, s);
         else if (event.button.button == 3)
-          return right_mouse_button_down(state, x, y, double_click, s);
+          {
+          if (mouse.left_button_down)
+            {
+            mouse.left_button_down = false;
+            mouse.right_button_down = false;
+            mouse.left_dragging = false;
+            return middle_mouse_button_down(state, x, y, false, s);
+            }
+          else
+            return right_mouse_button_down(state, x, y, double_click, s);
+          }
         break;
         }
         case SDL_MOUSEBUTTONUP:
         {
         int x = event.button.x / font_width;
         int y = event.button.y / font_height;
-        bool double_click = event.button.clicks > 1;
-        if (event.button.button == 1)
-          return left_mouse_button_up(state, x, y, s);
-        else if (event.button.button == 2)
+        if (event.button.button == 1 && mouse.left_button_down)          
+          return left_mouse_button_up(state, x, y, s);          
+        else if (event.button.button == 2 && mouse.middle_button_down)
           return middle_mouse_button_up(state, x, y, s);
-        else if (event.button.button == 3)
-          {
-          if (double_click)
-            {
-            mouse.right_button_down = false;
-            return middle_mouse_button_up(state, x, y, s);
-            }
-          else
-            return right_mouse_button_up(state, x, y, s);
-          }
+        else if (event.button.button == 3 && mouse.right_button_down)          
+          return right_mouse_button_up(state, x, y, s);    
+        else if (((event.button.button == 1) || (event.button.button == 3)) && mouse.middle_button_down)
+          return middle_mouse_button_up(state, x, y, s);
         break;
         }
         case SDL_MOUSEWHEEL:
@@ -2778,8 +2791,10 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 
   if (argc > 1)
     state.buffer = read_from_file(std::string(argv[1]));
-  else
+  else if (s.last_active_folder.empty())
     state.buffer = make_empty_buffer();
+  else
+    state.buffer = read_from_file(s.last_active_folder);
   state.command_buffer = insert(make_empty_buffer(), s.command_text, false);
   state.operation = op_editing;
   state.scroll_row = 0;
@@ -2821,4 +2836,5 @@ void engine::run()
   s.h = state.h / font_height;
   SDL_GetWindowPosition(pdc_window, &s.x, &s.y);
   s.command_text = buffer_to_string(state.command_buffer);
+  s.last_active_folder = jtk::get_folder(state.buffer.name);
   }
