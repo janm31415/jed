@@ -2138,10 +2138,6 @@ std::optional<app_state> mouse_motion(app_state state, int x, int y, const setti
   {
   if (mouse.left_button_down)
     mouse.left_dragging = true;
-  if (mouse.middle_button_down)
-    mouse.middle_dragging = true;
-  if (mouse.right_button_down)
-    mouse.right_dragging = true;
 
   if (mouse.left_dragging)
     {
@@ -2163,18 +2159,6 @@ std::optional<app_state> mouse_motion(app_state state, int x, int y, const setti
       {
       state.operation_buffer.pos = p.pos;
       }
-    }
-  if (mouse.middle_dragging)
-    {
-    auto p = find_mouse_text_pick(x, y);
-    if (p.type == mouse.middle_drag_start.type)
-      mouse.middle_drag_end = p;
-    }
-  if (mouse.right_dragging)
-    {
-    auto p = find_mouse_text_pick(x, y);
-    if (p.type == mouse.right_drag_start.type)
-      mouse.right_drag_end = p;
     }
   return state;
   }
@@ -2313,14 +2297,12 @@ std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, b
 std::optional<app_state> middle_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
   mouse.middle_button_down = true;
-  mouse.middle_drag_start = find_mouse_text_pick(x, y);
   return state;
   }
 
 std::optional<app_state> right_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
   mouse.right_button_down = true;
-  mouse.right_drag_start = find_mouse_text_pick(x, y);
   return state;
   }
 
@@ -2365,7 +2347,6 @@ std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, con
 
 std::optional<app_state> middle_mouse_button_up(app_state state, int x, int y, settings& s)
   {
-  mouse.middle_dragging = false;
   mouse.middle_button_down = false;
 
   screen_ex_pixel p = get_ex(y, x);
@@ -2414,7 +2395,6 @@ std::optional<app_state> middle_mouse_button_up(app_state state, int x, int y, s
 
 std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, settings& s)
   {
-  mouse.right_dragging = false;
   mouse.right_button_down = false;
 
   screen_ex_pixel p = get_ex(y, x);
@@ -2718,12 +2698,21 @@ std::optional<app_state> process_input(app_state state, settings& s)
         {
         int x = event.button.x / font_width;
         int y = event.button.y / font_height;
+        bool double_click = event.button.clicks > 1;
         if (event.button.button == 1)
           return left_mouse_button_up(state, x, y, s);
         else if (event.button.button == 2)
           return middle_mouse_button_up(state, x, y, s);
         else if (event.button.button == 3)
-          return right_mouse_button_up(state, x, y, s);
+          {
+          if (double_click)
+            {
+            mouse.right_button_down = false;
+            return middle_mouse_button_up(state, x, y, s);
+            }
+          else
+            return right_mouse_button_up(state, x, y, s);
+          }
         break;
         }
         case SDL_MOUSEWHEEL:

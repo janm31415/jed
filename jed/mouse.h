@@ -7,8 +7,6 @@ struct mouse_data
   {
   mouse_data();
   bool left_dragging;
-  bool right_dragging;
-  bool middle_dragging;
   int32_t mouse_x;
   int32_t mouse_y;
   int32_t prev_mouse_x;
@@ -20,10 +18,6 @@ struct mouse_data
   bool middle_button_down;
   screen_ex_pixel left_drag_start;
   screen_ex_pixel left_drag_end;
-  screen_ex_pixel middle_drag_start;
-  screen_ex_pixel middle_drag_end;
-  screen_ex_pixel right_drag_start;
-  screen_ex_pixel right_drag_end;
   };
 
 extern mouse_data mouse;
