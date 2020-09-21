@@ -1677,7 +1677,7 @@ std::wstring find_bottom_line_help_command(int x, int y)
     {
     move(y, i);
     chtype ch;
-    winchnstr(stdscr, &ch, 1);
+    winchstr(stdscr, &ch);
     command.push_back((wchar_t)(ch&A_CHARTEXT));
     }
   return clean_command(command);
@@ -1716,6 +1716,7 @@ std::optional<app_state> command_yes(app_state state, settings& s)
 
 std::optional<app_state> command_no(app_state state, settings& s)
   {
+  std::cout << "command no\n";
   switch (state.operation)
     {
     case op_query_save:
@@ -1944,6 +1945,7 @@ void free_arguments(char** argv)
 
 std::optional<app_state> execute(app_state state, const std::wstring& command, settings& s)
   {
+  std::cout << "execute\n";
   auto it = executable_commands.find(command);
   if (it != executable_commands.end())
     {
