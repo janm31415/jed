@@ -10,6 +10,7 @@ enum e_operation
   op_editing,
   op_command_editing,
   op_exit,
+  op_get,
   op_help,
   op_open,
   op_save,

@@ -462,7 +462,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, fb.pos, cursor, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb.content[current.row], current, cursor, fb.pos, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if (!has_nontrivial_selection && (current == cursor))
@@ -1375,6 +1375,12 @@ app_state make_new_buffer(app_state state)
   return state;
   }
 
+app_state get(app_state state)
+  {
+  state.buffer = read_from_file(state.buffer.name);
+  return state;
+  }
+
 std::optional<app_state> ret_operation(app_state state, const settings& s)
   {
   bool done = false;
@@ -1386,6 +1392,7 @@ std::optional<app_state> ret_operation(app_state state, const settings& s)
       case op_save: state = save_file(state); break;
       case op_query_save: state = save_file(state); break;
       case op_new: state = make_new_buffer(state); break;
+      case op_get: state = get(state); break;
       case op_exit: return std::nullopt;
       default: break;
       }
@@ -1716,6 +1723,46 @@ std::optional<app_state> command_no(app_state state, settings& s)
     }
   }
 
+std::optional<app_state> command_get(app_state state, settings& s)
+  {
+  if ((state.buffer.modification_mask & 1) == 1)
+    {
+    state.operation = op_query_save;
+    state.operation_stack.push_back(op_get);
+    return make_save_buffer(state);
+    }
+  return get(state);
+  }
+
+std::optional<app_state> command_put(app_state state, settings& s)
+  {
+  if (state.buffer.name.empty())
+    {
+    std::string error_message = "Error saving nameless file";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  if (state.buffer.name.back() == '/')
+    {
+    std::string error_message = "Error saving folder as file";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  bool success = false;
+  state.buffer = save_to_file(success, state.buffer, state.buffer.name);
+  if (success)
+    {
+    std::string message = "Saved file " + state.buffer.name;
+    state.message = string_to_line(message);
+    }
+  else
+    {
+    std::string error_message = "Error saving file " + state.buffer.name;
+    state.message = string_to_line(error_message);
+    }
+  return state;
+  }
+
 std::optional<app_state> command_show_all_characters(app_state state, settings& s)
   {
   s.show_all_characters = !s.show_all_characters;
@@ -1753,11 +1800,13 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Cancel", command_cancel},
   {L"Copy", command_copy_to_snarf_buffer},
   {L"Exit", command_exit},
+  {L"Get", command_get},
   {L"Help", command_help},
   {L"New", command_new},
   {L"No", command_no},
   {L"Open", command_open},
   {L"Paste", command_paste_from_snarf_buffer},
+  {L"Put", command_put},
   {L"Redo", command_redo},
   {L"Save", command_save},
   {L"Sel/all", command_select_all},
@@ -1800,6 +1849,15 @@ void split_command(std::wstring& first, std::wstring& remainder, const std::wstr
   remainder = command.substr(pos_quote_2 + 1);
   }
 
+void remove_quotes(std::wstring& cmd)
+  {
+  if (cmd.size() >= 2 && cmd.front() == L'"' && cmd.back() == L'"')
+    {
+    cmd.erase(cmd.begin());
+    cmd.pop_back();
+    }
+  }
+
 char** alloc_arguments(const std::string& path, const std::vector<std::string>& parameters)
   {
   char** argv = new char*[parameters.size() + 2];
@@ -1825,6 +1883,7 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
 
   std::wstring cmd_id, cmd_remainder;
   split_command(cmd_id, cmd_remainder, command);
+  remove_quotes(cmd_id);
 
   auto file_path = get_file_path(jtk::convert_wstring_to_string(cmd_id), state.buffer.name);
 
@@ -1864,8 +1923,109 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
   return state;
   }
 
-std::optional<app_state> load(app_state state, const std::wstring& command, const settings& s)
+std::optional<app_state> load_file(app_state state, const std::string& filename, settings& s)
   {
+  std::string exepath = jtk::get_executable_path();
+  exepath.insert(exepath.begin(), '"');
+  exepath.push_back('"');
+  exepath.push_back(' ');
+  exepath.push_back('"');
+  exepath.append(filename);
+  exepath.push_back('"');
+  return execute(state, jtk::convert_string_to_wstring(exepath), s);
+  }
+
+std::vector<std::string> split_folder(const std::string& folder)
+  {
+  std::wstring wfolder = jtk::convert_string_to_wstring(folder);
+  std::vector<std::string> out;
+
+  while (!wfolder.empty())
+    {
+    auto it = wfolder.find_first_of(L'/');
+    auto it_backup = wfolder.find_first_of(L'\\');
+    if (it_backup < it)
+      it = it_backup;
+    if (it == std::wstring::npos)
+      {
+      out.push_back(jtk::convert_wstring_to_string(wfolder));
+      wfolder.clear();
+      }
+    else
+      {
+      std::wstring part = wfolder.substr(0, it);
+      wfolder.erase(0, it + 1);
+      out.push_back(jtk::convert_wstring_to_string(part));
+      }
+    }
+  return out;
+  }
+
+std::vector<std::string> simplify_split_folder(const std::vector<std::string>& split)
+  {
+  std::vector<std::string> out = split;
+  auto it = std::find(out.begin(), out.end(), std::string(".."));
+  while (it != out.end() && it != out.begin())
+    {
+    out.erase(it - 1, it + 1);
+    it = std::find(out.begin(), out.end(), std::string(".."));
+    }
+  return out;
+  }
+
+std::string compose_folder_from_split(const std::vector<std::string>& split)
+  {
+  std::string out;
+  for (const auto& s : split)
+    {
+    out.append(s);
+    out.push_back('/');
+    }
+  return out;
+  }
+
+std::optional<app_state> load_folder(app_state state, const std::string& folder, settings& s)
+  {  
+  auto split = split_folder(folder);
+  split = simplify_split_folder(split);
+  std::string simplified_folder_name = compose_folder_from_split(split);
+  if (jtk::is_directory(state.buffer.name))
+    {
+    state.buffer = read_from_file(simplified_folder_name);
+    return state;
+    }
+  else
+    return load_file(state, simplified_folder_name, s);
+  }
+
+std::optional<app_state> load(app_state state, const std::wstring& command, settings& s)
+  {
+  std::string folder = jtk::get_folder(state.buffer.name);
+  if (folder.empty())
+    folder = jtk::get_executable_path();
+  if (folder.back() != '\\' && folder.back() != '/')
+    folder.push_back('/');
+  std::string newfilename = folder + jtk::convert_wstring_to_string(command);
+
+  if (jtk::file_exists(newfilename))
+    {
+    return load_file(state, newfilename, s);
+    }
+
+  if (jtk::is_directory(newfilename))
+    {
+    return load_folder(state, newfilename, s);
+    }
+
+
+  if (jtk::file_exists(jtk::convert_wstring_to_string(command)))
+    return load_file(state, jtk::convert_wstring_to_string(command), s);
+
+  if (jtk::is_directory(jtk::convert_wstring_to_string(command)))
+    {
+    return load_folder(state, jtk::convert_wstring_to_string(command), s);
+    }
+
   return state;
   }
 
@@ -2075,7 +2235,7 @@ std::optional<app_state> middle_mouse_button_up(app_state state, int x, int y, s
   return state;
   }
 
-std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, const settings& s)
+std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, settings& s)
   {
   mouse.right_dragging = false;
   mouse.right_button_down = false;

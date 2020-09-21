@@ -4,6 +4,8 @@
 
 #include <jtk/file_utils.h>
 
+#include "utils.h"
+
 file_buffer make_empty_buffer()
   {
   file_buffer fb;
@@ -28,21 +30,97 @@ file_buffer read_from_file(const std::string& filename)
     std::string wfilename(filename);
 #endif
     auto f = std::ifstream{ wfilename };
-    auto trans_lines = fb.content.transient();    
-    while (!f.eof())
+    auto trans_lines = fb.content.transient();
+    try
       {
-      std::string file_line;
-      std::getline(f, file_line);
-      auto trans = line().transient();
-      auto it = file_line.begin();
-      auto it_end = file_line.end();
-      utf8::utf8to16(it, it_end, std::back_inserter(trans));
-      if (!f.eof())
-        trans.push_back('\n');
-      trans_lines.push_back(trans.persistent());
+      while (!f.eof())
+        {
+        std::string file_line;
+        std::getline(f, file_line);
+        auto trans = line().transient();
+        auto it = file_line.begin();
+        auto it_end = file_line.end();
+        utf8::utf8to16(it, it_end, std::back_inserter(trans));
+        if (!f.eof())
+          trans.push_back('\n');
+        trans_lines.push_back(trans.persistent());
+        }
+      }
+    catch (...)
+      {
+      while (!trans_lines.empty())
+        trans_lines.pop_back();
+      f.seekg(0);
+      while (!f.eof())
+        {
+        std::string file_line;
+        std::getline(f, file_line);
+        auto trans = line().transient();
+        auto it = file_line.begin();
+        auto it_end = file_line.end();
+        for (; it != it_end; ++it)
+          {
+          trans.push_back(ascii_to_utf16(*it));
+          }
+        if (!f.eof())
+          trans.push_back('\n');
+        trans_lines.push_back(trans.persistent());
+        }
       }
     fb.content = trans_lines.persistent();
     f.close();
+    }
+  else if (is_directory(filename))
+    {
+    std::wstring wfilename = convert_string_to_wstring(fb.name);
+    std::replace(wfilename.begin(), wfilename.end(), '\\', '/'); // replace all '\\' to '/'
+    if (wfilename.back() != L'/')
+      wfilename.push_back(L'/');
+    fb.name = convert_wstring_to_string(wfilename);
+    auto trans_lines = fb.content.transient();
+
+    line dots;
+    dots = dots.push_back(L'.');
+    dots = dots.push_back(L'.');
+    dots = dots.push_back(L'\n');
+    trans_lines.push_back(dots);
+
+    auto items = get_subdirectories_from_directory(filename, false);
+    std::sort(items.begin(), items.end(), [](const std::string& lhs, const std::string& rhs)
+      {
+      const auto result = std::mismatch(lhs.cbegin(), lhs.cend(), rhs.cbegin(), rhs.cend(), [](const unsigned char lhs, const unsigned char rhs) {return tolower(lhs) == tolower(rhs); });
+      return result.second != rhs.cend() && (result.first == lhs.cend() || tolower(*result.first) < tolower(*result.second));
+      });
+    for (auto& item : items)
+      {
+      item = get_filename(item);
+      auto witem = convert_string_to_wstring(item);
+      line ln;
+      auto folder_content = ln.transient();
+      for (auto ch : witem)
+        folder_content.push_back(ch);
+      folder_content.push_back(L'/');
+      folder_content.push_back(L'\n');
+      trans_lines.push_back(folder_content.persistent());
+      }
+    items = get_files_from_directory(filename, false);
+    std::sort(items.begin(), items.end(), [](const std::string& lhs, const std::string& rhs)
+      {
+      const auto result = std::mismatch(lhs.cbegin(), lhs.cend(), rhs.cbegin(), rhs.cend(), [](const unsigned char lhs, const unsigned char rhs) {return tolower(lhs) == tolower(rhs); });
+      return result.second != rhs.cend() && (result.first == lhs.cend() || tolower(*result.first) < tolower(*result.second));
+      });
+    for (auto& item : items)
+      {
+      item = get_filename(item);
+      auto witem = convert_string_to_wstring(item);
+      line ln;
+      auto folder_content = ln.transient();
+      for (auto ch : witem)
+        folder_content.push_back(ch);
+      folder_content.push_back(L'\n');
+      trans_lines.push_back(folder_content.persistent());
+      }
+    fb.content = trans_lines.persistent();
     }
 
   return fb;
@@ -120,7 +198,13 @@ position get_actual_position(file_buffer fb)
 
 bool has_selection(file_buffer fb)
   {
-  return (fb.start_selection && (*fb.start_selection != fb.pos));
+  if (fb.start_selection && (*fb.start_selection != fb.pos))
+    {
+    if (*fb.start_selection == get_actual_position(fb))
+      return false;
+    return true;
+    }
+  return false;
   }
 
 bool has_rectangular_selection(file_buffer fb)
@@ -233,7 +317,7 @@ namespace
       int64_t current_line = 0;
       while (!wtxt.empty() && current_line < nr_lines)
         {
-        
+
         auto endline_position = wtxt.find_first_of(L'\n');
         if (endline_position != std::wstring::npos)
           ++endline_position;
@@ -281,7 +365,7 @@ namespace
 
     if (single_line)
       {
-      line input = txt[0];      
+      line input = txt[0];
 
       for (int64_t r = minrow; r <= maxrow; ++r)
         {
@@ -306,7 +390,7 @@ namespace
       while (txt_line < txt.size() && current_line < nr_lines)
         {
         auto input = txt[txt_line];
-       
+
         if (!input.empty() && input.back() == L'\n')
           input = input.pop_back();
 
@@ -475,11 +559,11 @@ file_buffer erase(file_buffer fb, bool save_undo)
       fb.content = fb.content.erase(pos.row).set(pos.row - 1, l);
       --fb.pos.row;
       }
-    
+
     }
   else
     {
-    
+
     auto p1 = get_actual_position(fb);
     auto p2 = *fb.start_selection;
     if (p2 < p1)
@@ -577,7 +661,7 @@ file_buffer erase_right(file_buffer fb, bool save_undo)
       get_rectangular_selection(minrow, maxrow, mincol, maxcol, p1, p2);
       for (int64_t r = minrow; r <= maxrow; ++r)
         {
-        fb.content = fb.content.set(r, fb.content[r].take(mincol) + fb.content[r].drop(maxcol+1));
+        fb.content = fb.content.set(r, fb.content[r].take(mincol) + fb.content[r].drop(maxcol + 1));
         }
       fb.start_selection->col = mincol;
       fb.pos.col = mincol;
@@ -791,5 +875,5 @@ position get_last_position(file_buffer fb)
     return position(row, 0);
   if (fb.content.back().back() != L'\n')
     return position(row, fb.content.back().size());
-  return position(row, fb.content.back().size()-1);
+  return position(row, fb.content.back().size() - 1);
   }
