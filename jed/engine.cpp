@@ -8,8 +8,6 @@
 #include "process.h"
 #include "utils.h"
 
-#include <iostream>
-
 #include <jtk/file_utils.h>
 
 #include <map>
@@ -1944,7 +1942,6 @@ void free_arguments(char** argv)
 
 std::optional<app_state> execute(app_state state, const std::wstring& command, settings& s)
   {
-  std::cout << "execute\n";
   auto it = executable_commands.find(command);
   if (it != executable_commands.end())
     {
@@ -1955,11 +1952,7 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
   split_command(cmd_id, cmd_remainder, command);
   remove_quotes(cmd_id);
 
-std::wcout << L"cmd_id: " << cmd_id << L"\n";
-
   auto file_path = get_file_path(jtk::convert_wstring_to_string(cmd_id), state.buffer.name);
-  
-  std::cout << "file_path: " << file_path << "\n";
 
   if (file_path.empty())
     return state;
@@ -2007,7 +2000,6 @@ std::optional<app_state> load_file(app_state state, const std::string& filename,
   exepath.push_back('"');
   exepath.append(filename);
   exepath.push_back('"');
-  std::cout << "load_file: " << exepath << "\n";
   return execute(state, jtk::convert_string_to_wstring(exepath), s);
   }
 
@@ -2078,7 +2070,6 @@ std::optional<app_state> load_folder(app_state state, const std::string& folder,
     }
   else
     {
-    std::cout << "simplified_folder_name: " << simplified_folder_name << "\n";
     return load_file(state, simplified_folder_name, s);
     }
   }
@@ -2102,30 +2093,23 @@ std::optional<app_state> load(app_state state, const std::wstring& command, sett
     cmd.erase(cmd.begin());
   std::string newfilename = folder + cmd;
 
-  std::cout << "newfilename: " << newfilename << std::endl;
-
   if (jtk::file_exists(newfilename))
     {
     return load_file(state, newfilename, s);
     }
-
-  std::cout << "did not exist\n";
   
   if (jtk::is_directory(newfilename))
     {
     return load_folder(state, newfilename, s);
     }
-  std::cout << "and is not a folder\n";
 
   if (jtk::file_exists(jtk::convert_wstring_to_string(command)))
     {
-    std::wcout << command << L" is a file\n";
     return load_file(state, jtk::convert_wstring_to_string(command), s);
     }
     
   if (jtk::is_directory(jtk::convert_wstring_to_string(command)))
     {
-    std::wcout << command << L" is a folder\n";
     return load_folder(state, jtk::convert_wstring_to_string(command), s);
     }
 
