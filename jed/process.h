@@ -6,7 +6,9 @@
 #include <jtk/file_utils.h>
 #include <string>
 #else
+#include <signal.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #endif
 
 #include "active_folder.h"

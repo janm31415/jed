@@ -8,6 +8,8 @@
 #include "process.h"
 #include "utils.h"
 
+#include <iostream>
+
 #include <jtk/file_utils.h>
 
 #include <map>
@@ -1918,7 +1920,7 @@ void split_command(std::wstring& first, std::wstring& remainder, const std::wstr
 
 void remove_quotes(std::wstring& cmd)
   {
-  if (cmd.size() >= 2 && cmd.front() == L'"' && cmd.back() == L'"')
+  while (cmd.size() >= 2 && cmd.front() == L'"' && cmd.back() == L'"')
     {
     cmd.erase(cmd.begin());
     cmd.pop_back();
@@ -1952,7 +1954,11 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
   split_command(cmd_id, cmd_remainder, command);
   remove_quotes(cmd_id);
 
+std::wcout << L"cmd_id: " << cmd_id << L"\n";
+
   auto file_path = get_file_path(jtk::convert_wstring_to_string(cmd_id), state.buffer.name);
+  
+  std::cout << "file_path: " << file_path << "\n";
 
   if (file_path.empty())
     return state;
