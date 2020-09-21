@@ -1,5 +1,6 @@
 #pragma once
 
+#include "settings.h"
 
 enum e_color
   {
@@ -12,4 +13,4 @@ enum e_color
   title_bar
   };
 
-void init_colors();
+void init_colors(const settings& s);

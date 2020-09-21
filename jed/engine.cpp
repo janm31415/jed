@@ -1723,6 +1723,67 @@ std::optional<app_state> command_no(app_state state, settings& s)
     }
   }
 
+std::optional<app_state> command_acme_theme(app_state state, settings& s)
+  {
+  s.color_editor_text = 0xff000000;
+  s.color_editor_background = 0xfff0ffff;
+  s.color_editor_tag = 0xfff18255;
+  s.color_editor_text_bold = 0xff000000;
+  s.color_editor_background_bold = 0xffa2e9eb;
+  s.color_editor_tag_bold = 0xffff9b73;
+
+  s.color_command_text = 0xff000000;
+  s.color_command_background = 0xfffcfbe7;
+  s.color_command_tag = 0xff5582f1;
+
+  s.color_titlebar_text = 0xff000000;
+  s.color_titlebar_background = 0xffffffff;
+  init_colors(s);
+  stdscr->_clear = TRUE;
+  return state;
+  }
+
+std::optional<app_state> command_dark_theme(app_state state, settings& s)
+  {
+  s.color_editor_text = 0xffc0c0c0;
+  s.color_editor_background = 0xff000000;
+  s.color_editor_tag = 0xfff18255;
+  s.color_editor_text_bold = 0xffffffff;
+  s.color_editor_background_bold = 0xff000000;
+  s.color_editor_tag_bold = 0xffff9b73;
+
+  s.color_command_text = 0xff000000;
+  s.color_command_background = 0xffc0c0c0;
+  s.color_command_tag = 0xff5582f1;
+
+  s.color_titlebar_text = 0xff000000;
+  s.color_titlebar_background = 0xffffffff;
+  init_colors(s);
+  stdscr->_clear = TRUE;
+  return state;
+  }
+
+
+std::optional<app_state> command_matrix_theme(app_state state, settings& s)
+  {
+  s.color_editor_text = 0xff00c800;
+  s.color_editor_background = 0xff000000;
+  s.color_editor_tag = 0xff00ff00;
+  s.color_editor_text_bold = 0xff00ff00;
+  s.color_editor_background_bold = 0xff000000;
+  s.color_editor_tag_bold = 0xff82ff82;
+
+  s.color_command_text = 0xff00ff00;
+  s.color_command_background = 0xff005000;
+  s.color_command_tag = 0xff00ff00;
+
+  s.color_titlebar_text = 0xff00ff00;
+  s.color_titlebar_background = 0xff006400;
+  init_colors(s);
+  stdscr->_clear = TRUE;
+  return state;
+  }
+
 std::optional<app_state> command_get(app_state state, settings& s)
   {
   if ((state.buffer.modification_mask & 1) == 1)
@@ -1795,13 +1856,16 @@ std::optional<app_state> command_tab_spaces(app_state state, settings& s)
 
 const auto executable_commands = std::map<std::wstring, std::function<std::optional<app_state>(app_state, settings&)>>
   {
+  {L"AcmeTheme", command_acme_theme},
   {L"AllChars", command_show_all_characters},
   {L"Back", command_cancel},
   {L"Cancel", command_cancel},
   {L"Copy", command_copy_to_snarf_buffer},
+  {L"DarkTheme", command_dark_theme},
   {L"Exit", command_exit},
   {L"Get", command_get},
-  {L"Help", command_help},
+  {L"Help", command_help},  
+  {L"MatrixTheme", command_matrix_theme},
   {L"New", command_new},
   {L"No", command_no},
   {L"Open", command_open},
@@ -1998,6 +2062,12 @@ std::optional<app_state> load_folder(app_state state, const std::string& folder,
     return load_file(state, simplified_folder_name, s);
   }
 
+std::optional<app_state> find_text(app_state state, const std::wstring& command, const settings& s)
+  {
+  // todo
+  return check_scroll_position(state, s);
+  }
+
 std::optional<app_state> load(app_state state, const std::wstring& command, settings& s)
   {
   std::string folder = jtk::get_folder(state.buffer.name);
@@ -2026,7 +2096,7 @@ std::optional<app_state> load(app_state state, const std::wstring& command, sett
     return load_folder(state, jtk::convert_wstring_to_string(command), s);
     }
 
-  return state;
+  return find_text(state, command, s);
   }
 
 screen_ex_pixel find_mouse_text_pick(int x, int y)
@@ -2092,8 +2162,96 @@ std::optional<app_state> mouse_motion(app_state state, int x, int y, const setti
   return state;
   }
 
+bool valid_char_for_word_selection(wchar_t ch)
+  {
+  bool valid = false;
+  valid |= (ch >= 48 && ch <= 57); // [0 : 9]
+  valid |= (ch >= 97 && ch <= 122); // [a : z]
+  valid |= (ch >= 65 && ch <= 90); // [A : Z]
+  valid |= (ch == 95); // _  c++: naming
+  valid |= (ch == 33); // !  scheme: vector-set!
+  valid |= (ch == 63); // ?  scheme: eq?
+  valid |= (ch == 45); // -  scheme: list-ref
+  valid |= (ch == 42); // *  scheme: let*
+  return valid;
+  }
+
+std::pair<int64_t, int64_t> get_word_from_position(file_buffer fb, position pos)
+  {
+  std::pair<int64_t, int64_t> selection(-1, -1);
+  if (pos.row >= fb.content.size())
+    return selection;
+
+  line ln = fb.content[pos.row];
+  if (pos.col >= ln.size())
+    return selection;
+
+  const auto it0 = ln.begin();
+  auto it = ln.begin() + pos.col;
+  auto it2 = it;
+  auto it_end = ln.end();
+  if (it == it_end)
+    --it;
+  while (it > it0)
+    {
+    if (!valid_char_for_word_selection(*it))
+      break;
+    --it;
+    }
+  if (!valid_char_for_word_selection(*it))
+    ++it;
+  while (it2 < it_end)
+    {
+    if (!valid_char_for_word_selection(*it2))
+      break;
+    ++it2;
+    }
+  if (it2 <= it)
+    return selection;
+  int64_t p1 = (int64_t)std::distance(it0, it);
+  int64_t p2 = (int64_t)std::distance(it0, it2);
+
+  // now check special cases
+  // first special: case var-> : will select var- because of scheme rule, but here we're c++ and we don't want the -
+
+  if (p2 < ln.size())
+    {
+    if (ln[p2] == '>' && ln[p2 - 1] == '-')
+      --p2;
+    }
+
+  selection.first = p1;
+  selection.second = p2-1;
+
+  return selection;
+  }
+
+std::optional<app_state> select_word(app_state state, int x, int y, const settings& s)
+  {
+  std::pair<int64_t, int64_t> selection(-1, -1);
+  auto p = get_ex(y, x);
+  if (p.type == SET_TEXT_EDITOR)
+    {
+    selection = get_word_from_position(state.buffer, p.pos);
+    }
+  else if (p.type == SET_TEXT_COMMAND)
+    {
+    selection = get_word_from_position(state.command_buffer, p.pos);    
+    }
+  if (selection.first >= 0 && selection.second >= 0)
+    {
+    state.buffer.start_selection->row = p.pos.row;
+    state.buffer.start_selection->col = selection.first;
+    state.buffer.pos.row = p.pos.row;
+    state.buffer.pos.col = selection.second;
+    }
+  return state;
+  }
+
 std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
+  if (double_click)
+    return select_word(state, x, y, s);
   mouse.left_button_down = true;
   mouse.left_drag_start = find_mouse_text_pick(x, y);
   if (mouse.left_drag_start.type == SET_TEXT_EDITOR)
@@ -2151,6 +2309,8 @@ std::optional<app_state> right_mouse_button_down(app_state state, int x, int y, 
 
 std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, const settings& s)
   {
+  if (!mouse.left_button_down) // we come from a double click
+    return state;
   mouse.left_dragging = false;
   mouse.left_button_down = false;
 
@@ -2607,7 +2767,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 
   start_color();
   use_default_colors();
-  init_colors();
+  init_colors(s);
   bkgd(COLOR_PAIR(default_color));
 
   if (argc > 1)

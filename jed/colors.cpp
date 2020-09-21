@@ -12,6 +12,10 @@ namespace
 
   struct rgb
     {
+    rgb(uint32_t v) : r(v & 255), g((v >> 8) & 255), b((v >> 16)&255)
+      {
+      }
+
     rgb(int red, int green, int blue) : r(red), g(green), b(blue) {}
     int r, g, b;
     };
@@ -204,11 +208,44 @@ namespace
   }
 
 
-void init_colors()
+void init_colors(const settings& s)
   {
-  //darktheme();
+
+  init_color(jed_title_text, rgb(s.color_titlebar_text));
+  init_color(jed_title_bg, rgb(s.color_titlebar_background));
+  init_color(jed_title_text_bold, rgb(s.color_titlebar_text));
+  init_color(jed_title_bg_bold, rgb(s.color_titlebar_background));
+
+  init_color(jed_editor_text, rgb(s.color_editor_text));
+  init_color(jed_editor_bg, rgb(s.color_editor_background));
+  init_color(jed_editor_tag, rgb(s.color_editor_tag));
+
+  init_color(jed_command_text, rgb(s.color_command_text));
+  init_color(jed_command_bg, rgb(s.color_command_background));
+  init_color(jed_command_tag, rgb(s.color_command_tag));
+
+  init_color(jed_editor_text_bold, rgb(s.color_editor_text_bold));
+  init_color(jed_editor_bg_bold, rgb(s.color_editor_background_bold));
+  init_color(jed_editor_tag_bold, rgb(s.color_editor_tag_bold));
+
+  init_color(jed_command_text_bold, rgb(s.color_command_text));
+  init_color(jed_command_bg_bold, rgb(s.color_command_background));
+  init_color(jed_command_tag_bold, rgb(s.color_command_tag));
+
+  init_pair(default_color, jed_editor_text, jed_editor_bg);
+  init_pair(command_color, jed_command_text, jed_command_bg);
+  init_pair(multiline_tag_editor, jed_editor_tag, jed_editor_bg);
+  init_pair(multiline_tag_command, jed_command_tag, jed_command_bg);
+
+  init_pair(scroll_bar_b_editor, jed_command_bg, jed_editor_bg);
+  init_pair(scroll_bar_f_editor, jed_editor_tag, jed_editor_bg);
+
+  init_pair(title_bar, jed_title_text, jed_title_bg);
+
+  /*
+  darktheme();
   //darktheme_softer();
-  acmetheme();
+  //acmetheme();
   //matrixtheme();
 
   init_pair(default_color, jed_editor_text, jed_editor_bg);
@@ -220,4 +257,5 @@ void init_colors()
   init_pair(scroll_bar_f_editor, jed_editor_tag, jed_editor_bg);
 
   init_pair(title_bar, jed_title_text, jed_title_bg);
+  */
   }

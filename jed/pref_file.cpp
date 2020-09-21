@@ -150,7 +150,13 @@ pref_file_element pref_file_element::AddValue(double value)
   return *this;
   }
 
-pref_file_element pref_file_element::AddValue(int value)
+pref_file_element pref_file_element::AddValue(int32_t value)
+  {
+  (*node->j) = value;
+  return *this;
+  }
+
+pref_file_element pref_file_element::AddValue(uint32_t value)
   {
   (*node->j) = value;
   return *this;
@@ -193,7 +199,13 @@ pref_file_element pref_file_element::PushValue(double value)
   return *this;
   }
 
-pref_file_element pref_file_element::PushValue(int value)
+pref_file_element pref_file_element::PushValue(int32_t value)
+  {
+  (*node->j).push_back(value);
+  return *this;
+  }
+
+pref_file_element pref_file_element::PushValue(uint32_t value)
   {
   (*node->j).push_back(value);
   return *this;
@@ -230,7 +242,7 @@ pref_file_element("root", std::make_shared<node_type>())
       try
         {
         i >> *(node->j);
-        }
+        } 
       catch (nlohmann::detail::exception e)
         {
         printf("Error: %s\n", e.what());
