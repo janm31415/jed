@@ -177,7 +177,10 @@ void draw_title_bar(app_state state)
   attrset(COLOR_PAIR(title_bar));
   std::wstring title_bar(cols, ' ');
 
-  std::wstring filename = L"file: " + (state.buffer.name.empty() ? std::wstring(L"<noname>") : jtk::convert_string_to_wstring(state.buffer.name));
+  std::wstring filename = L"file: ";
+  if (!state.buffer.name.empty() && state.buffer.name.back() == '/')
+    filename = L"folder: ";
+  filename.append((state.buffer.name.empty() ? std::wstring(L"<noname>") : jtk::convert_string_to_wstring(state.buffer.name)));
   write_center(title_bar, filename);
 
   if ((state.buffer.modification_mask & 1) == 1)
@@ -2053,10 +2056,16 @@ std::optional<app_state> load_folder(app_state state, const std::string& folder,
   auto split = split_folder(folder);
   split = simplify_split_folder(split);
   std::string simplified_folder_name = compose_folder_from_split(split);
+  if (simplified_folder_name.empty())
+    {
+    std::string error_message = "Invalid folder";
+    state.message = string_to_line(error_message);
+    return state;
+    }
   if (jtk::is_directory(state.buffer.name))
     {
     state.buffer = read_from_file(simplified_folder_name);
-    return state;
+    return check_scroll_position(state, s);
     }
   else
     return load_file(state, simplified_folder_name, s);
