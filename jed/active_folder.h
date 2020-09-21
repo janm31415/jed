@@ -4,9 +4,11 @@
 #include <windows.h>
 #include <string>
 #include <jtk/file_utils.h>
-#else
+#elif defined(unix)
 #include <unistd.h>
 #include <linux/limits.h>
+#elif defined(__APPLE__)
+#include <unistd.h>
 #endif
 
 
