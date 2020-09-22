@@ -10,6 +10,7 @@ file_buffer make_empty_buffer()
   {
   file_buffer fb;
   fb.pos.row = fb.pos.col = 0;
+  fb.xpos = 0;
   fb.start_selection = std::nullopt;
   fb.modification_mask = 0;
   fb.undo_redo_index = 0;
@@ -194,6 +195,66 @@ position get_actual_position(file_buffer fb)
       }
     }
   return out;
+  }
+
+uint32_t character_width(uint32_t character, int64_t x_pos, const env_settings& s)
+  {
+  switch (character)
+    {
+    case 9: return s.tab_space - (x_pos % s.tab_space);
+    case 10: return s.show_all_characters ? 2 : 1;
+    case 13: return s.show_all_characters ? 2 : 1;
+    default: return 1;
+    }
+  }
+
+int64_t line_length_up_to_column(line ln, int64_t column, const env_settings& s)
+  {
+  int64_t length = 0;
+  int64_t col = 0;
+  for (int64_t i = 0; i <= column && i < ln.size(); ++i)
+    {
+    uint32_t w = character_width(ln[i], col, s);
+    length += w;
+    col += w;
+    }
+  return length;
+  }
+
+int64_t get_col_from_line_length(line ln, int64_t length, const env_settings& s)
+  {
+  int64_t le = 0;
+  int64_t col = 0;
+  int64_t out = 0;
+  for (int i = 0; le < length && i < ln.size(); ++i)
+    {
+    uint32_t w = character_width(ln[i], col, s);
+    le += w;
+    col += w;
+    ++out;
+    }
+  return out;
+  }
+
+bool in_selection(file_buffer fb, position current, position cursor, position buffer_pos, std::optional<position> start_selection, bool rectangular)
+  {
+  bool has_selection = start_selection != std::nullopt;
+  if (has_selection)
+    {
+    if (!rectangular)
+      return ((start_selection <= current && current <= cursor) || (cursor <= current && current <= start_selection));
+
+    int64_t mincol = start_selection->col;
+    int64_t minrow = start_selection->row;
+    int64_t maxcol = buffer_pos.col;
+    int64_t maxrow = buffer_pos.row;
+    if (maxcol < mincol)
+      std::swap(maxcol, mincol);
+    if (maxrow < minrow)
+      std::swap(maxrow, minrow);
+    return (minrow <= current.row && current.row <= maxrow && mincol <= current.col && current.col <= maxcol);
+    }
+  return false;
   }
 
 bool has_selection(file_buffer fb)
@@ -414,13 +475,13 @@ namespace
     }
   }
 
-file_buffer insert(file_buffer fb, const std::string& txt, bool save_undo)
+file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s, bool save_undo)
   {
   if (save_undo)
     fb = push_undo(fb);
 
   if (has_nontrivial_selection(fb))
-    fb = erase(fb, false);
+    fb = erase(fb, s, false);
 
   if (has_rectangular_selection(fb))
     return insert_rectangular(fb, txt, false);
@@ -474,17 +535,17 @@ file_buffer insert(file_buffer fb, const std::string& txt, bool save_undo)
       fb.pos.col += input.size();
       }
     }
-
+  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   return fb;
   }
 
-file_buffer insert(file_buffer fb, text txt, bool save_undo)
+file_buffer insert(file_buffer fb, text txt, const env_settings& s, bool save_undo)
   {
   if (save_undo)
     fb = push_undo(fb);
 
   if (has_nontrivial_selection(fb))
-    fb = erase(fb, false);
+    fb = erase(fb, s, false);
 
   if (has_rectangular_selection(fb))
     return insert_rectangular(fb, txt, false);
@@ -528,11 +589,11 @@ file_buffer insert(file_buffer fb, text txt, bool save_undo)
     txt = txt.set(txt.size() - 1, ln2);
     fb.content = fb.content.take(pos.row) + txt + fb.content.drop(pos.row + 1);
     }
-
+  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   return fb;
   }
 
-file_buffer erase(file_buffer fb, bool save_undo)
+file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo)
   {
   if (fb.content.empty())
     return fb;
@@ -559,7 +620,7 @@ file_buffer erase(file_buffer fb, bool save_undo)
       fb.content = fb.content.erase(pos.row).set(pos.row - 1, l);
       --fb.pos.row;
       }
-
+    fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
     }
   else
     {
@@ -575,7 +636,7 @@ file_buffer erase(file_buffer fb, bool save_undo)
       fb.content = fb.content.set(p1.row, fb.content[p1.row].erase(p1.col, p2.col));
       fb.pos.col = p1.col;
       fb.pos.row = p1.row;
-      fb = erase_right(fb, false);
+      fb = erase_right(fb, s, false);
       }
     else
       {
@@ -591,7 +652,7 @@ file_buffer erase(file_buffer fb, bool save_undo)
         fb.content = fb.content.set(p1.row, fb.content[p1.row].erase(p1.col, fb.content[p1.row].size() - 1));
         fb.pos.col = p1.col;
         fb.pos.row = p1.row;
-        fb = erase_right(fb, false);
+        fb = erase_right(fb, s, false);
         }
       else
         {
@@ -620,13 +681,14 @@ file_buffer erase(file_buffer fb, bool save_undo)
           fb.start_selection->col = mincol;
           fb.pos.col = mincol;
           }
+        fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
         }
       }
     }
   return fb;
   }
 
-file_buffer erase_right(file_buffer fb, bool save_undo)
+file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo)
   {
   if (save_undo)
     fb = push_undo(fb);
@@ -649,6 +711,7 @@ file_buffer erase_right(file_buffer fb, bool save_undo)
       auto l = fb.content[pos.row].pop_back() + fb.content[pos.row + 1];
       fb.content = fb.content.erase(pos.row + 1).set(pos.row, l);
       }
+    fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
     return fb;
     }
   else
@@ -665,9 +728,10 @@ file_buffer erase_right(file_buffer fb, bool save_undo)
         }
       fb.start_selection->col = mincol;
       fb.pos.col = mincol;
+      fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
       return fb;
       }
-    return erase(fb, false);
+    return erase(fb, s, false);
     }
   }
 
@@ -723,7 +787,7 @@ text get_selection(file_buffer fb)
   return out;
   }
 
-file_buffer undo(file_buffer fb)
+file_buffer undo(file_buffer fb, const env_settings& s)
   {
   if (fb.undo_redo_index == fb.history.size()) // first time undo
     {
@@ -741,10 +805,11 @@ file_buffer undo(file_buffer fb)
     fb.rectangular_selection = ss.rectangular_selection;
     fb.history = fb.history.push_back(ss);
     }
+  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   return fb;
   }
 
-file_buffer redo(file_buffer fb)
+file_buffer redo(file_buffer fb, const env_settings& s)
   {
   if (fb.undo_redo_index + 1 < fb.history.size())
     {
@@ -757,10 +822,11 @@ file_buffer redo(file_buffer fb)
     fb.rectangular_selection = ss.rectangular_selection;
     fb.history = fb.history.push_back(ss);
     }
+  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   return fb;
   }
 
-file_buffer select_all(file_buffer fb)
+file_buffer select_all(file_buffer fb, const env_settings& s)
   {
   if (fb.content.empty())
     return fb;
@@ -770,10 +836,11 @@ file_buffer select_all(file_buffer fb)
   fb.start_selection = pos;
   fb.pos.row = fb.content.size() - 1;
   fb.pos.col = fb.content.back().size();
+  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   return fb;
   }
 
-file_buffer move_left(file_buffer fb)
+file_buffer move_left(file_buffer fb, const env_settings& s)
   {
   if (fb.content.empty())
     return fb;
@@ -788,10 +855,11 @@ file_buffer move_left(file_buffer fb)
     }
   else
     fb.pos.col = actual.col - 1;
+  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   return fb;
   }
 
-file_buffer move_right(file_buffer fb)
+file_buffer move_right(file_buffer fb, const env_settings& s)
   {
   if (fb.content.empty())
     return fb;
@@ -808,32 +876,62 @@ file_buffer move_right(file_buffer fb)
     assert(fb.pos.row == fb.content.size() - 1);
     assert(fb.pos.col == fb.content.back().size());
     }
+  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   return fb;
   }
 
-file_buffer move_up(file_buffer fb)
+file_buffer move_up(file_buffer fb, const env_settings& s)
   {
   if (fb.pos.row > 0)
-    --fb.pos.row;
-  return fb;
-  }
-
-file_buffer move_down(file_buffer fb)
-  {
-  if ((fb.pos.row + 1) < fb.content.size())
     {
-    ++fb.pos.row;
+    --fb.pos.row;
+    int64_t new_col = get_col_from_line_length(fb.content[fb.pos.row], fb.xpos, s);
+    fb.pos.col = new_col;
     }
   return fb;
   }
 
-file_buffer move_home(file_buffer fb)
+file_buffer move_down(file_buffer fb, const env_settings& s)
   {
-  fb.pos.col = 0;
+  if ((fb.pos.row + 1) < fb.content.size())
+    {
+    ++fb.pos.row;
+    int64_t new_col = get_col_from_line_length(fb.content[fb.pos.row], fb.xpos, s);
+    fb.pos.col = new_col;
+    }
   return fb;
   }
 
-file_buffer move_end(file_buffer fb)
+file_buffer move_page_up(file_buffer fb, int64_t rows, const env_settings& s)
+  {
+  fb.pos.row -= rows;
+  if (fb.pos.row < 0)
+    fb.pos.row = 0;
+  int64_t new_col = get_col_from_line_length(fb.content[fb.pos.row], fb.xpos, s);
+  fb.pos.col = new_col;
+  return fb;
+  }
+
+file_buffer move_page_down(file_buffer fb, int64_t rows, const env_settings& s)
+  {
+  if (fb.content.empty())
+    return fb;
+  fb.pos.row += rows;
+  if (fb.pos.row >= fb.content.size())
+    fb.pos.row = fb.content.size()-1;
+  int64_t new_col = get_col_from_line_length(fb.content[fb.pos.row], fb.xpos, s);
+  fb.pos.col = new_col;
+  return fb;
+  }
+
+file_buffer move_home(file_buffer fb, const env_settings& s)
+  {
+  fb.pos.col = 0;
+  fb.xpos = 0;
+  return fb;
+  }
+
+file_buffer move_end(file_buffer fb, const env_settings& s)
   {
   if (fb.content.empty())
     return fb;
@@ -847,7 +945,7 @@ file_buffer move_end(file_buffer fb)
     if (fb.content.back().back() != L'\n')
       ++fb.pos.col;
     }
-
+  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   return fb;
   }
 
@@ -876,4 +974,11 @@ position get_last_position(file_buffer fb)
   if (fb.content.back().back() != L'\n')
     return position(row, fb.content.back().size());
   return position(row, fb.content.back().size() - 1);
+  }
+
+file_buffer update_position(file_buffer fb, position pos, const env_settings& s)
+  {
+  fb.pos = pos;
+  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  return fb;
   }

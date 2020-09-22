@@ -61,12 +61,27 @@ struct file_buffer
   text content;
   std::string name;
   position pos;
+  int64_t xpos;
   std::optional<position> start_selection;
   immutable::vector<snapshot, false> history;
   uint64_t undo_redo_index;
   uint8_t modification_mask;
   bool rectangular_selection;
   };
+
+struct env_settings
+  {
+  int tab_space;
+  bool show_all_characters;
+  };
+
+uint32_t character_width(uint32_t character, int64_t x_pos, const env_settings& s);
+
+int64_t line_length_up_to_column(line ln, int64_t column, const env_settings& s);
+
+int64_t get_col_from_line_length(line ln, int64_t length, const env_settings& s);
+
+bool in_selection(file_buffer fb, position current, position cursor, position buffer_pos, std::optional<position> start_selection, bool rectangular);
 
 bool has_selection(file_buffer fb);
 
@@ -90,35 +105,41 @@ file_buffer start_selection(file_buffer fb);
 
 file_buffer clear_selection(file_buffer fb);
 
-file_buffer insert(file_buffer fb, const std::string& txt, bool save_undo = true);
+file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s, bool save_undo = true);
 
-file_buffer insert(file_buffer fb, text txt, bool save_undo = true);
+file_buffer insert(file_buffer fb, text txt, const env_settings& s, bool save_undo = true);
 
-file_buffer erase(file_buffer fb, bool save_undo = true);
+file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo = true);
 
-file_buffer erase_right(file_buffer fb, bool save_undo = true);
+file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo = true);
 
 file_buffer push_undo(file_buffer fb);
 
 text get_selection(file_buffer fb);
 
-file_buffer undo(file_buffer fb);
+file_buffer undo(file_buffer fb, const env_settings& s);
 
-file_buffer redo(file_buffer fb);
+file_buffer redo(file_buffer fb, const env_settings& s);
 
-file_buffer select_all(file_buffer fb);
+file_buffer select_all(file_buffer fb, const env_settings& s);
 
-file_buffer move_left(file_buffer fb);
+file_buffer move_left(file_buffer fb, const env_settings& s);
 
-file_buffer move_right(file_buffer fb);
+file_buffer move_right(file_buffer fb, const env_settings& s);
 
-file_buffer move_up(file_buffer fb);
+file_buffer move_up(file_buffer fb, const env_settings& s);
 
-file_buffer move_down(file_buffer fb);
+file_buffer move_down(file_buffer fb, const env_settings& s);
 
-file_buffer move_home(file_buffer fb);
+file_buffer move_page_up(file_buffer fb, int64_t rows, const env_settings& s);
 
-file_buffer move_end(file_buffer fb);
+file_buffer move_page_down(file_buffer fb, int64_t rows, const env_settings& s);
+
+file_buffer move_home(file_buffer fb, const env_settings& s);
+
+file_buffer move_end(file_buffer fb, const env_settings& s);
+
+file_buffer update_position(file_buffer fb, position pos, const env_settings& s);
 
 std::string buffer_to_string(file_buffer fb);
 
