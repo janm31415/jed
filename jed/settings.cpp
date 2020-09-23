@@ -49,6 +49,8 @@ void update_settings(settings& s, const char* filename)
   f["font_size"] >> s.font_size;
   f["mouse_scroll_steps"] >> s.mouse_scroll_steps;
   f["last_active_folder"] >> s.last_active_folder;
+  f["last_find"] >> s.last_find;
+  f["last_replace"] >> s.last_replace;
 
   f["color_editor_text"] >> s.color_editor_text;
   f["color_editor_background"] >> s.color_editor_background;
@@ -87,6 +89,8 @@ void write_settings(const settings& s, const char* filename)
   f << "font_size" << s.font_size;
   f << "mouse_scroll_steps" << s.mouse_scroll_steps;
   f << "last_active_folder" << s.last_active_folder;
+  f << "last_find" << s.last_find;
+  f << "last_replace" << s.last_replace;
 
   f << "color_editor_text" << s.color_editor_text;
   f << "color_editor_background" << s.color_editor_background;

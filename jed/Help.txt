@@ -4,3 +4,6 @@ jed help
 
 Ctrl, + : increase command window
 Ctrl, - : decrease command window
+
+Ctrl, g : go to line
+Ctrl, f : find

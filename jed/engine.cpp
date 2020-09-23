@@ -12,6 +12,7 @@
 
 #include <map>
 #include <functional>
+#include <sstream>
 
 #include <SDL.h>
 #include <SDL_syswm.h>
@@ -345,6 +346,8 @@ std::string get_operation_text(e_operation op)
   {
   switch (op)
     {
+    case op_find: return std::string("Find: ");
+    case op_goto: return std::string("Go to line: ");
     case op_open: return std::string("Open file: ");
     case op_save: return std::string("Save file: ");
     case op_query_save: return std::string("Save file: ");
@@ -384,9 +387,19 @@ void draw_help_text(app_state state)
   if (state.operation == op_editing || state.operation == op_command_editing)
     {
     static std::string line1("^N New    ^O Open   ^S Save   ^C Copy   ^V Paste  ^Z Undo   ^Y Redo   ^A Sel/all");
-    static std::string line2("^H Help   ^X Exit");
+    static std::string line2("F1 Help   ^X Exit   ^F Find   ^G Goto   ^H Replace");
     draw_help_line(line1, rows - 2, cols);
     draw_help_line(line2, rows - 1, cols);
+    }
+  if (state.operation == op_find)
+    {
+    static std::string line1("^X Cancel");
+    draw_help_line(line1, rows - 2, cols);
+    }
+  if (state.operation == op_goto)
+    {
+    static std::string line1("^X Cancel");
+    draw_help_line(line1, rows - 2, cols);
     }
   if (state.operation == op_open)
     {
@@ -1339,13 +1352,59 @@ app_state get(app_state state)
   return state;
   }
 
-std::optional<app_state> ret_operation(app_state state, const settings& s)
+app_state find(app_state state, settings& s)
+  {
+  std::wstring search_string;
+  if (!state.operation_buffer.content.empty())
+    search_string = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
+  s.last_find = jtk::convert_wstring_to_string(search_string);
+  state.buffer = find_text(state.buffer, search_string);
+  return state;
+  }
+
+app_state find_next(app_state state, settings& s)
+  {
+  state.operation = op_editing;  
+  state.buffer = find_text(state.buffer, s.last_find);
+  return state;
+  }
+
+app_state gotoline(app_state state, const settings& s)
+  {
+  state.operation = op_editing;  
+  if (!state.operation_buffer.content.empty())
+    {
+    int64_t r = -1;
+    std::wstring line_nr = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
+    std::wstringstream str;
+    str << line_nr;
+    str >> r;
+    if (r > 0)
+      {
+      state.buffer.pos.row = r - 1;
+      state.buffer.pos.col = 0;
+      state.buffer = clear_selection(state.buffer);      
+      if (state.buffer.pos.row >= state.buffer.content.size())
+        {
+        if (state.buffer.content.empty())
+          state.buffer.pos.row = 0;
+        else
+          state.buffer.pos.row = state.buffer.content.size() - 1;
+        }
+      }
+    }
+  return state;
+  }
+
+std::optional<app_state> ret_operation(app_state state, settings& s)
   {
   bool done = false;
   while (!done)
     {
     switch (state.operation)
       {
+      case op_find: state = find(state, s); break;
+      case op_goto: state = gotoline(state, s); break;
       case op_open: state = open_file(state, s); break;
       case op_save: state = save_file(state); break;
       case op_query_save: state = save_file(state); break;
@@ -1368,7 +1427,7 @@ std::optional<app_state> ret_operation(app_state state, const settings& s)
   return state;
   }
 
-std::optional<app_state> ret(app_state state, const settings& s)
+std::optional<app_state> ret(app_state state, settings& s)
   {
   if (state.operation == op_editing)
     return ret_editor(state, s);
@@ -1395,6 +1454,22 @@ std::optional<app_state> make_save_buffer(app_state state, const settings& s)
   {
   state = clear_operation_buffer(state);
   state.operation_buffer = insert(state.operation_buffer, state.buffer.name, convert(s), false);
+  return state;
+  }
+
+std::optional<app_state> make_find_buffer(app_state state, settings& s)
+  {
+  state = clear_operation_buffer(state);
+  state.operation_buffer = insert(state.operation_buffer, s.last_find, convert(s), false);
+  return state;
+  }
+
+std::optional<app_state> make_goto_buffer(app_state state, const settings& s)
+  {
+  state = clear_operation_buffer(state);
+  std::stringstream str;
+  str << state.buffer.pos.row + 1;
+  state.operation_buffer = insert(state.operation_buffer, str.str(), convert(s), false);
   return state;
   }
 
@@ -1656,6 +1731,18 @@ std::optional<app_state> command_help(app_state state, settings& s)
   return load_file(state, helppath, s);
   }
 
+std::optional<app_state> command_find(app_state state, settings& s)
+  {
+  state.operation = op_find;
+  return make_find_buffer(state, s);  
+  }
+
+std::optional<app_state> command_goto(app_state state, settings& s)
+  {
+  state.operation = op_goto;
+  return make_goto_buffer(state, s);
+  }
+
 std::optional<app_state> command_yes(app_state state, settings& s)
   {
   switch (state.operation)
@@ -1823,7 +1910,9 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Copy", command_copy_to_snarf_buffer},
   {L"DarkTheme", command_dark_theme},
   {L"Exit", command_exit},
+  {L"Find", command_find},
   {L"Get", command_get},
+  {L"Goto", command_goto},
   {L"Help", command_help},  
   {L"MatrixTheme", command_matrix_theme},
   {L"New", command_new},
@@ -2031,10 +2120,22 @@ std::optional<app_state> load_folder(app_state state, const std::string& folder,
     }
   }
 
-std::optional<app_state> find_text(app_state state, const std::wstring& command, const settings& s)
+std::optional<app_state> find_text(app_state state, const std::wstring& command, settings& s)
   {
-  // todo
-  return check_scroll_position(state, s);
+  if (state.operation == op_editing)
+    {
+    s.last_find = jtk::convert_wstring_to_string(command);
+    state.buffer = find_text(state.buffer, command);
+    return check_scroll_position(state, s);
+    }
+  if (state.operation == op_command_editing)
+    {
+    s.last_find = jtk::convert_wstring_to_string(command);
+    state.operation = op_editing;
+    state.buffer = find_text(state.buffer, command);
+    return check_scroll_position(state, s);
+    }
+  return state;
   }
 
 std::optional<app_state> load(app_state state, const std::wstring& command, settings& s)
@@ -2508,6 +2609,8 @@ std::optional<app_state> process_input(app_state state, settings& s)
             }
           return state;
           }
+          case SDLK_KP_PLUS:
+          case SDLK_PLUS:
           case SDLK_EQUALS:
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
@@ -2521,6 +2624,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
             }
           break;
           }
+          case SDLK_KP_MINUS:
           case SDLK_MINUS:
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
@@ -2531,6 +2635,18 @@ std::optional<app_state> process_input(app_state state, settings& s)
             return state;
             }
           break;
+          }
+          case SDLK_F1:
+          {
+          return command_help(state, s);
+          }
+          case SDLK_F3:
+          {
+          return find_next(state, s);
+          }
+          case SDLK_F5:
+          {
+          return command_get(state, s);
           }
           case SDLK_a:
           {
@@ -2545,6 +2661,22 @@ std::optional<app_state> process_input(app_state state, settings& s)
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
             return command_copy_to_snarf_buffer(state, s);
+            }
+          break;
+          }
+          case SDLK_f:
+          {
+          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+            {
+            return command_find(state, s);
+            }
+          break;
+          }
+          case SDLK_g:
+          {
+          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+            {
+            return command_goto(state, s);
             }
           break;
           }

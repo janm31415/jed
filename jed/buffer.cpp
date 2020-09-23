@@ -399,7 +399,7 @@ namespace
         auto ln = fb.content[r];
         int64_t current_col = get_col_from_line_length(fb.content[r], minx, s);
         int64_t len = line_length_up_to_column(fb.content[r], current_col - 1, s);
-        if (len == minx)          
+        if (len == minx)
           {
           ln = ln.take(current_col) + input + ln.drop(current_col);
           }
@@ -731,7 +731,7 @@ file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo)
       auto l = fb.content[pos.row].pop_back() + fb.content[pos.row + 1];
       fb.content = fb.content.erase(pos.row + 1).set(pos.row, l);
       }
-    else if (pos.col == fb.content[pos.row].size()-1)// last line, last item
+    else if (pos.col == fb.content[pos.row].size() - 1)// last line, last item
       {
       fb.content = fb.content.set(pos.row, fb.content[pos.row].pop_back());
       }
@@ -750,7 +750,7 @@ file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo)
         {
         int64_t current_col = get_col_from_line_length(fb.content[r], minx, s);
         int64_t len = line_length_up_to_column(fb.content[r], current_col - 1, s);
-        if (len == minx && (current_col < fb.content[r].size() - 1 || (current_col == fb.content[r].size() - 1 && r == fb.content.size()-1) ))
+        if (len == minx && (current_col < fb.content[r].size() - 1 || (current_col == fb.content[r].size() - 1 && r == fb.content.size() - 1)))
           fb.content = fb.content.set(r, fb.content[r].take(current_col) + fb.content[r].drop(current_col + 1));
         }
       fb.start_selection->col = get_col_from_line_length(fb.content[fb.start_selection->row], minx, s);
@@ -976,10 +976,10 @@ file_buffer move_end(file_buffer fb, const env_settings& s)
   return fb;
   }
 
-std::string buffer_to_string(file_buffer fb)
+std::string to_string(text txt)
   {
   std::string out;
-  for (auto ln : fb.content)
+  for (auto ln : txt)
     {
     std::string str;
     auto it = ln.begin();
@@ -991,16 +991,26 @@ std::string buffer_to_string(file_buffer fb)
   return out;
   }
 
+std::string buffer_to_string(file_buffer fb)
+  {
+  return to_string(fb.content);
+  }
+
+position get_last_position(text txt)
+  {
+  if (txt.empty())
+    return position(0, 0);
+  int64_t row = txt.size() - 1;
+  if (txt.back().empty())
+    return position(row, 0);
+  if (txt.back().back() != L'\n')
+    return position(row, txt.back().size());
+  return position(row, txt.back().size() - 1);
+  }
+
 position get_last_position(file_buffer fb)
   {
-  if (fb.content.empty())
-    return position(0, 0);
-  int64_t row = fb.content.size() - 1;
-  if (fb.content.back().empty())
-    return position(row, 0);
-  if (fb.content.back().back() != L'\n')
-    return position(row, fb.content.back().size());
-  return position(row, fb.content.back().size() - 1);
+  return get_last_position(fb.content);
   }
 
 file_buffer update_position(file_buffer fb, position pos, const env_settings& s)
@@ -1008,4 +1018,110 @@ file_buffer update_position(file_buffer fb, position pos, const env_settings& s)
   fb.pos = pos;
   fb.xpos = get_x_position(fb, s);
   return fb;
+  }
+
+text to_text(std::wstring wtxt)
+  {
+  text out;
+  auto transout = out.transient();
+  while (!wtxt.empty())
+    {
+    auto endline_position = wtxt.find_first_of(L'\n');
+    if (endline_position != std::wstring::npos)
+      ++endline_position;
+    std::wstring wline = wtxt.substr(0, endline_position);
+    wtxt.erase(0, endline_position);
+
+    line input;
+    auto trans = input.transient();
+    for (auto ch : wline)
+      trans.push_back(ch);
+    transout.push_back(trans.persistent());
+    }
+  return transout.persistent();
+  }
+
+text to_text(const std::string& txt)
+  {
+  return to_text(jtk::convert_string_to_wstring(txt));
+  }
+
+position get_next_position(text txt, position pos)
+  {
+  if (pos.row >= txt.size())
+    return pos;
+  ++pos.col;
+  if (pos.col >= txt[pos.row].size())
+    {
+    ++pos.row;
+    pos.col = 0;
+    }
+  if (pos.row >= txt.size())
+    {
+    return get_last_position(txt);
+    }
+  return pos;
+  }
+
+position get_next_position(file_buffer fb, position pos)
+  {
+  return get_next_position(fb.content, pos);
+  }
+
+file_buffer find_text(file_buffer fb, text txt)
+  {
+  if (txt.empty())
+    return fb;
+  if (fb.content.empty())
+    return fb;
+  fb.rectangular_selection = false;
+  position lastpos = get_last_position(fb);
+  position pos = fb.pos;
+  position text_pos(0, 0);
+  position lasttext = get_last_position(txt);
+  position first_encounter;
+  if (has_selection(fb) && fb.start_selection > pos)
+    pos = *fb.start_selection;
+  if (pos == lastpos)
+    pos.col = pos.row = 0;
+  else
+    pos = get_next_position(fb, pos);
+  wchar_t current_text_char = txt[text_pos.row][text_pos.col];
+  wchar_t first_text_char = txt[text_pos.row][text_pos.col];
+  while (pos != lastpos)
+    {
+    wchar_t current_char = fb.content[pos.row][pos.col];  
+    if (current_char == current_text_char)
+      {
+      if (text_pos.col == 0 && text_pos.row == 0)
+        first_encounter = pos;
+      text_pos = get_next_position(txt, text_pos);      
+      if (text_pos == lasttext)
+        {
+        fb.pos = first_encounter;
+        fb.start_selection = pos;
+        return fb;
+        }
+      current_text_char = txt[text_pos.row][text_pos.col];
+      }
+    else
+      {
+      current_text_char = first_text_char;
+      text_pos = position(0, 0);
+      }
+    pos = get_next_position(fb, pos);
+    }
+  fb.pos = lastpos;
+  fb.start_selection = std::nullopt;  
+  return fb;
+  }
+
+file_buffer find_text(file_buffer fb, const std::wstring& wtxt)
+  {
+  return find_text(fb, to_text(wtxt));
+  }
+
+file_buffer find_text(file_buffer fb, const std::string& txt)
+  {
+  return find_text(fb, jtk::convert_string_to_wstring(txt));
   }
