@@ -14,6 +14,8 @@ enum e_operation
   op_goto,
   op_get,
   op_open,
+  op_from_find_to_replace,
+  op_replace,
   op_save,
   op_query_save,
   op_new

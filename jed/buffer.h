@@ -109,6 +109,8 @@ file_buffer clear_selection(file_buffer fb);
 
 file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s, bool save_undo = true);
 
+file_buffer insert(file_buffer fb, std::wstring wtxt, const env_settings& s, bool save_undo = true);
+
 file_buffer insert(file_buffer fb, text txt, const env_settings& s, bool save_undo = true);
 
 file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo = true);

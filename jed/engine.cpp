@@ -41,6 +41,8 @@ env_settings convert(const settings& s)
   return out;
   }
 
+app_state clear_operation_buffer(app_state state);
+
 app_state resize_font(app_state state, int font_size, settings& s)
   {
   pdc_font_size = font_size;
@@ -347,6 +349,7 @@ std::string get_operation_text(e_operation op)
   switch (op)
     {
     case op_find: return std::string("Find: ");
+    case op_replace: return std::string("Replace: ");
     case op_goto: return std::string("Go to line: ");
     case op_open: return std::string("Open file: ");
     case op_save: return std::string("Save file: ");
@@ -394,6 +397,11 @@ void draw_help_text(app_state state)
   if (state.operation == op_find)
     {
     static std::string line1("^X Cancel");
+    draw_help_line(line1, rows - 2, cols);
+    }
+  if (state.operation == op_replace)
+    {
+    static std::string line1("^X Cancel ^A All");
     draw_help_line(line1, rows - 2, cols);
     }
   if (state.operation == op_goto)
@@ -642,7 +650,7 @@ app_state draw(app_state state, const settings& s)
   draw_title_bar(state);
 
 
-  draw_buffer(state.buffer, state.scroll_row, SET_TEXT_EDITOR, s, state.operation == op_editing);
+  draw_buffer(state.buffer, state.scroll_row, SET_TEXT_EDITOR, s, state.operation != op_command_editing);
 
   draw_command_buffer(state.command_buffer, state.command_scroll_row, s, state.operation == op_command_editing);
 
@@ -1276,6 +1284,7 @@ std::string clean_filename(std::string name)
 
 app_state open_file(app_state state, const settings& s)
   {
+  state.operation = op_editing;
   std::wstring wfilename;
   if (!state.operation_buffer.content.empty())
     wfilename = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
@@ -1312,6 +1321,7 @@ app_state open_file(app_state state, const settings& s)
 
 app_state save_file(app_state state)
   {
+  state.operation = op_editing;
   std::wstring wfilename;
   if (!state.operation_buffer.content.empty())
     wfilename = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
@@ -1343,35 +1353,90 @@ app_state make_new_buffer(app_state state)
   state.buffer = make_empty_buffer();
   state.scroll_row = 0;
   state.message = string_to_line("[New]");
+  state.operation = op_editing;
   return state;
   }
 
 app_state get(app_state state)
   {
   state.buffer = read_from_file(state.buffer.name);
+  state.operation = op_editing;
   return state;
   }
 
 app_state find(app_state state, settings& s)
   {
+  state.message = string_to_line("[Find]");
   std::wstring search_string;
   if (!state.operation_buffer.content.empty())
     search_string = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
   s.last_find = jtk::convert_wstring_to_string(search_string);
   state.buffer = find_text(state.buffer, search_string);
-  return state;
+  state.operation = op_editing;
+  return check_scroll_position(state, s);
+  }
+
+app_state replace(app_state state, settings& s)
+  {
+  state.message = string_to_line("[Replace]");
+  state.operation = op_editing;
+  std::wstring replace_string;
+  state.buffer = erase_right(state.buffer, convert(s), true);
+  if (!state.operation_buffer.content.empty())
+    replace_string = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
+  s.last_replace = jtk::convert_wstring_to_string(replace_string);
+  if (state.buffer.pos != get_last_position(state.buffer))
+    state.buffer = insert(state.buffer, replace_string, convert(s), false);  
+  return check_scroll_position(state, s);
+  }
+
+app_state replace_all(app_state state, settings& s)
+  {
+  state.message = string_to_line("[Replace all]");
+  state.operation = op_editing;
+  std::wstring replace_string;
+  if (!state.operation_buffer.content.empty())
+    replace_string = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
+  s.last_replace = jtk::convert_wstring_to_string(replace_string);
+  std::wstring find_string = jtk::convert_string_to_wstring(s.last_find);  
+  state.buffer.pos = position(0, 0); // go to start
+  state.buffer.start_selection = std::nullopt;
+  state.buffer.rectangular_selection = false;
+  state.buffer = find_text(state.buffer, find_string);
+  if (state.buffer.pos == get_last_position(state.buffer))
+    return state;
+  state.buffer = push_undo(state.buffer);
+  auto senv = convert(s);
+  while (state.buffer.pos != get_last_position(state.buffer))
+    {
+    state.buffer = erase_right(state.buffer, senv, false);
+    state.buffer = insert(state.buffer, replace_string, senv, false);
+    state.buffer = find_text(state.buffer, find_string);
+    }  
+  return check_scroll_position(state, s);
+  }
+
+app_state prepare_replace(app_state state, const settings& s)
+  {
+  state = clear_operation_buffer(state);
+  state.operation = op_replace;  
+  state.operation_buffer = insert(state.operation_buffer, s.last_replace, convert(s), false);
+  return check_scroll_position(state, s);
   }
 
 app_state find_next(app_state state, settings& s)
   {
+  state.message = string_to_line("[Find next]");
   state.operation = op_editing;  
   state.buffer = find_text(state.buffer, s.last_find);
-  return state;
+  return check_scroll_position(state, s);
   }
 
 app_state gotoline(app_state state, const settings& s)
   {
   state.operation = op_editing;  
+  std::stringstream messagestr;
+  messagestr << "[Go to line ";
   if (!state.operation_buffer.content.empty())
     {
     int64_t r = -1;
@@ -1379,6 +1444,7 @@ app_state gotoline(app_state state, const settings& s)
     std::wstringstream str;
     str << line_nr;
     str >> r;
+    messagestr << r << "]";
     if (r > 0)
       {
       state.buffer.pos.row = r - 1;
@@ -1393,7 +1459,10 @@ app_state gotoline(app_state state, const settings& s)
         }
       }
     }
-  return state;
+  state.operation = op_editing;
+
+  state.message = string_to_line(messagestr.str());
+  return check_scroll_position(state, s);
   }
 
 std::optional<app_state> ret_operation(app_state state, settings& s)
@@ -1408,6 +1477,8 @@ std::optional<app_state> ret_operation(app_state state, settings& s)
       case op_open: state = open_file(state, s); break;
       case op_save: state = save_file(state); break;
       case op_query_save: state = save_file(state); break;
+      case op_from_find_to_replace: state = prepare_replace(state, s); break;
+      case op_replace: state = replace(state, s); break;
       case op_new: state = make_new_buffer(state); break;
       case op_get: state = get(state); break;
       case op_exit: return std::nullopt;
@@ -1415,7 +1486,7 @@ std::optional<app_state> ret_operation(app_state state, settings& s)
       }
     if (state.operation_stack.empty())
       {
-      state.operation = op_editing;
+      //state.operation = op_editing;
       done = true;
       }
     else
@@ -1523,6 +1594,7 @@ std::optional<app_state> stop_selection(app_state state)
 
 std::optional<app_state> command_undo(app_state state, settings& s)
   {
+  state.message = string_to_line("[Undo]");
   if (state.operation == op_editing)
     state.buffer = undo(state.buffer, convert(s));
   else if (state.operation == op_command_editing)
@@ -1534,6 +1606,7 @@ std::optional<app_state> command_undo(app_state state, settings& s)
 
 std::optional<app_state> command_redo(app_state state, settings& s)
   {
+  state.message = string_to_line("[Redo]");
   if (state.operation == op_editing)
     state.buffer = redo(state.buffer, convert(s));
   else if (state.operation == op_command_editing)
@@ -1551,6 +1624,7 @@ std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings&
     state.snarf_buffer = get_selection(state.command_buffer, convert(s));
   else
     state.snarf_buffer = get_selection(state.operation_buffer, convert(s));
+  state.message = string_to_line("[Copy]");
 #ifdef _WIN32
   std::wstring txt;
   for (const auto& ln : state.snarf_buffer)
@@ -1565,6 +1639,7 @@ std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings&
 
 std::optional<app_state> command_paste_from_snarf_buffer(app_state state, settings& s)
   {
+  state.message = string_to_line("[Paste]");
 #ifdef _WIN32
   auto txt = get_text_from_windows_clipboard();
   if (state.operation == op_editing)
@@ -1592,12 +1667,13 @@ std::optional<app_state> command_paste_from_snarf_buffer(app_state state, settin
     }
   else
     state.operation_buffer = insert(state.operation_buffer, state.snarf_buffer, convert(s));
-#endif
+#endif  
   return state;
   }
 
 std::optional<app_state> command_select_all(app_state state, settings& s)
   {
+  state.message = string_to_line("[Select all]");
   if (state.operation == op_editing)
     {
     state.buffer = select_all(state.buffer, convert(s));
@@ -1737,6 +1813,13 @@ std::optional<app_state> command_find(app_state state, settings& s)
   return make_find_buffer(state, s);  
   }
 
+std::optional<app_state> command_replace(app_state state, settings& s)
+  {
+  state.operation = op_find;
+  state.operation_stack.push_back(op_from_find_to_replace);
+  return make_find_buffer(state, s);
+  }
+
 std::optional<app_state> command_goto(app_state state, settings& s)
   {
   state.operation = op_goto;
@@ -1781,7 +1864,7 @@ std::optional<app_state> command_acme_theme(app_state state, settings& s)
 
   s.color_command_text = 0xff000000;
   s.color_command_background = 0xfffcfbe7;
-  s.color_command_tag = 0xff5582f1;
+  s.color_command_tag = 0xfff18255;
 
   s.color_titlebar_text = 0xff000000;
   s.color_titlebar_background = 0xffffffff;
@@ -1801,7 +1884,7 @@ std::optional<app_state> command_dark_theme(app_state state, settings& s)
 
   s.color_command_text = 0xff000000;
   s.color_command_background = 0xffc0c0c0;
-  s.color_command_tag = 0xff5582f1;
+  s.color_command_tag = 0xfff18255;
 
   s.color_titlebar_text = 0xff000000;
   s.color_titlebar_background = 0xffffffff;
@@ -1921,6 +2004,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Paste", command_paste_from_snarf_buffer},
   {L"Put", command_put},
   {L"Redo", command_redo},
+  {L"Replace", command_replace},
   {L"Save", command_save},
   {L"Sel/all", command_select_all},
   {L"TabSpaces", command_tab_spaces},
@@ -2336,8 +2420,23 @@ std::optional<app_state> select_word(app_state state, int x, int y, const settin
 
 std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
+  screen_ex_pixel p = get_ex(y, x);
+
+  if (p.type == SET_SCROLLBAR_EDITOR)
+    {
+    int offsetx, offsety, cols, rows;
+    get_editor_window_offset(offsetx, offsety, s);
+    get_editor_window_size(rows, cols, s);
+    double fraction = (double)(y - offsety) / (double)rows;
+    int steps = (int)(fraction * rows);
+    if (steps < 1)
+      steps = 1;
+    return move_editor_window_up_down(state, -steps, s);
+    }
+
   if (double_click)
     return select_word(state, x, y, s);
+
   mouse.left_button_down = true;
   mouse.left_drag_start = find_mouse_text_pick(x, y);
   if (mouse.left_drag_start.type == SET_TEXT_EDITOR)
@@ -2390,17 +2489,6 @@ std::optional<app_state> middle_mouse_button_down(app_state state, int x, int y,
 
 std::optional<app_state> right_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
-  mouse.right_button_down = true;
-  return state;
-  }
-
-std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, const settings& s)
-  {
-  if (!mouse.left_button_down) // we come from a double click
-    return state;
-  mouse.left_dragging = false;
-  mouse.left_button_down = false;
-
   screen_ex_pixel p = get_ex(y, x);
 
   if (p.type == SET_SCROLLBAR_EDITOR)
@@ -2412,8 +2500,19 @@ std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, con
     int steps = (int)(fraction * rows);
     if (steps < 1)
       steps = 1;
-    return move_editor_window_up_down(state, -steps, s);
+    return move_editor_window_up_down(state, steps, s);
     }
+
+  mouse.right_button_down = true;
+  return state;
+  }
+
+std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, const settings& s)
+  {
+  if (!mouse.left_button_down) // we come from a double click
+    return state;
+  mouse.left_dragging = false;
+  mouse.left_button_down = false;
 
   //if (p.type == SET_TEXT_EDITOR)
   //  {
@@ -2476,18 +2575,6 @@ std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, se
   mouse.right_button_down = false;
 
   screen_ex_pixel p = get_ex(y, x);
-
-  if (p.type == SET_SCROLLBAR_EDITOR)
-    {
-    int offsetx, offsety, cols, rows;
-    get_editor_window_offset(offsetx, offsety, s);
-    get_editor_window_size(rows, cols, s);
-    double fraction = (double)(y - offsety) / (double)rows;
-    int steps = (int)(fraction * rows);
-    if (steps < 1)
-      steps = 1;
-    return move_editor_window_up_down(state, steps, s);
-    }
 
   if (p.type == SET_TEXT_EDITOR)
     {
@@ -2652,7 +2739,11 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            return command_select_all(state, s);
+            switch (state.operation)
+              {
+              case op_replace: return replace_all(state, s);
+              default: return command_select_all(state, s);
+              }
             }
           break;
           }
@@ -2684,7 +2775,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
-            return command_help(state, s);
+            return command_replace(state, s);
             }
           break;
           }

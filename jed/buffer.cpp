@@ -335,14 +335,12 @@ void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_
 
 namespace
   {
-  file_buffer insert_rectangular(file_buffer fb, const std::string& txt, const env_settings& s, bool save_undo)
+  file_buffer insert_rectangular(file_buffer fb, std::wstring wtxt, const env_settings& s, bool save_undo)
     {
     fb.modification_mask |= 1;
 
     int64_t minrow, maxrow, minx, maxx;
     get_rectangular_selection(minrow, maxrow, minx, maxx, fb, *fb.start_selection, fb.pos, s);
-
-    std::wstring wtxt = jtk::convert_string_to_wstring(txt);
 
     bool single_line = wtxt.find_first_of(L'\n') == std::wstring::npos;
 
@@ -487,7 +485,7 @@ int64_t get_x_position(file_buffer fb, const env_settings& s)
   return fb.content.empty() ? 0 : line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   }
 
-file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s, bool save_undo)
+file_buffer insert(file_buffer fb, std::wstring wtxt, const env_settings& s, bool save_undo)
   {
   if (save_undo)
     fb = push_undo(fb);
@@ -496,13 +494,12 @@ file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s
     fb = erase(fb, s, false);
 
   if (has_rectangular_selection(fb))
-    return insert_rectangular(fb, txt, s, false);
+    return insert_rectangular(fb, wtxt, s, false);
 
   fb.start_selection = std::nullopt;
 
   fb.modification_mask |= 1;
 
-  std::wstring wtxt = jtk::convert_string_to_wstring(txt);
   auto pos = get_actual_position(fb);
 
   while (!wtxt.empty())
@@ -549,6 +546,12 @@ file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s
     }
   fb.xpos = get_x_position(fb, s);
   return fb;
+  }
+
+file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s, bool save_undo)
+  {
+  std::wstring wtxt = jtk::convert_string_to_wstring(txt);
+  return insert(fb, wtxt, s, save_undo);
   }
 
 file_buffer insert(file_buffer fb, text txt, const env_settings& s, bool save_undo)
