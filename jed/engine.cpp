@@ -201,6 +201,7 @@ This makes it possible to further fill the line with spaces after calling "draw_
 */
 int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s)
   {
+  auto senv = convert(s);
   line ln = fb.content[current.row];
   int multiline_tag = (int)multiline_tag_editor;
   if (set_type == SET_TEXT_COMMAND)
@@ -209,7 +210,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
   wide_characters_offset = 0;
   bool has_selection = start_selection != std::nullopt;
 
-  int64_t len = line_length_up_to_column(ln, maxcol - 1, convert(s));
+  int64_t len = line_length_up_to_column(ln, maxcol - 1, senv);
 
   bool multiline = (cursor.row == current.row) && (len >= (maxcol - 1));
   int64_t multiline_ref_col = cursor.col;
@@ -264,7 +265,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
   if (multiline)
     {
     int pagewidth = maxcol - 2 - MULTILINEOFFSET;
-    int64_t len_to_cursor = line_length_up_to_column(ln, multiline_ref_col-1, convert(s));
+    int64_t len_to_cursor = line_length_up_to_column(ln, multiline_ref_col-1, senv);
     page = len_to_cursor / pagewidth;
     if (page != 0) 
       {
@@ -278,8 +279,8 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
       else
         {
         int offset = page * pagewidth - MULTILINEOFFSET / 2;
-        current.col = get_col_from_line_length(ln, offset, convert(s));
-        int64_t length_done = line_length_up_to_column(ln, current.col - 1, convert(s));
+        current.col = get_col_from_line_length(ln, offset, senv);
+        int64_t length_done = line_length_up_to_column(ln, current.col - 1, senv);
         it += current.col;
         wide_characters_offset = length_done - (current.col - 1);
         xoffset -= current.col + wide_characters_offset;
@@ -301,7 +302,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
     if (drawn >= maxcol)
       break;
 
-    if (active && in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular))
+    if (active && in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular, senv))
       attron(A_REVERSE);
     else
       attroff(A_REVERSE);
@@ -313,7 +314,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
 
     move((int)r, (int)current.col + xoffset + wide_characters_offset);
     auto character = *it;
-    uint32_t cwidth = character_width(character, current.col + wide_characters_offset, convert(s));
+    uint32_t cwidth = character_width(character, current.col + wide_characters_offset, senv);
     for (uint32_t cnt = 0; cnt < cwidth && drawn < maxcol; ++cnt)
       {
       add_ex(current, set_type);
@@ -324,7 +325,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
     ++current.col;
     }
 
-  if (!in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular))
+  if (!in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular, senv))
     attroff(A_REVERSE);
 
   if (multiline && (it != it_end))
@@ -1470,11 +1471,11 @@ std::optional<app_state> command_redo(app_state state, settings& s)
 std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings& s)
   {
   if (state.operation == op_editing)
-    state.snarf_buffer = get_selection(state.buffer);
+    state.snarf_buffer = get_selection(state.buffer, convert(s));
   else if (state.operation == op_command_editing)
-    state.snarf_buffer = get_selection(state.command_buffer);
+    state.snarf_buffer = get_selection(state.command_buffer, convert(s));
   else
-    state.snarf_buffer = get_selection(state.operation_buffer);
+    state.snarf_buffer = get_selection(state.operation_buffer, convert(s));
 #ifdef _WIN32
   std::wstring txt;
   for (const auto& ln : state.snarf_buffer)
@@ -1586,10 +1587,11 @@ std::wstring clean_command(std::wstring command)
 
 std::wstring find_command(file_buffer fb, position pos, const settings& s)
   {
+  auto senv = convert(s);
   auto cursor = get_actual_position(fb);
-  if (has_nontrivial_selection(fb) && in_selection(fb, pos, cursor, fb.pos, fb.start_selection, fb.rectangular_selection))
+  if (has_nontrivial_selection(fb, senv) && in_selection(fb, pos, cursor, fb.pos, fb.start_selection, fb.rectangular_selection, senv))
     {
-    auto txt = get_selection(fb);
+    auto txt = get_selection(fb, senv);
     std::wstring out;
     for (auto line : txt)
       {
@@ -2223,6 +2225,11 @@ std::optional<app_state> select_word(app_state state, int x, int y, const settin
     state.buffer.pos.row = p.pos.row;
     state.buffer.pos.col = selection.second;
     }
+  else
+    {
+    p = find_mouse_text_pick(x, y);
+    state.buffer = update_position(state.buffer, p.pos, convert(s));
+    }
   return state;
   }
 
@@ -2306,6 +2313,12 @@ std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, con
       steps = 1;
     return move_editor_window_up_down(state, -steps, s);
     }
+
+  //if (p.type == SET_TEXT_EDITOR)
+  //  {
+  //  state.buffer = update_position(state.buffer, p.pos, convert(s));
+  //  }
+
   return state;
   }
 

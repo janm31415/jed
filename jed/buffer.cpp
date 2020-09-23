@@ -236,7 +236,7 @@ int64_t get_col_from_line_length(line ln, int64_t length, const env_settings& s)
   return out;
   }
 
-bool in_selection(file_buffer fb, position current, position cursor, position buffer_pos, std::optional<position> start_selection, bool rectangular)
+bool in_selection(file_buffer fb, position current, position cursor, position buffer_pos, std::optional<position> start_selection, bool rectangular, const env_settings& s)
   {
   bool has_selection = start_selection != std::nullopt;
   if (has_selection)
@@ -244,15 +244,12 @@ bool in_selection(file_buffer fb, position current, position cursor, position bu
     if (!rectangular)
       return ((start_selection <= current && current <= cursor) || (cursor <= current && current <= start_selection));
 
-    int64_t mincol = start_selection->col;
-    int64_t minrow = start_selection->row;
-    int64_t maxcol = buffer_pos.col;
-    int64_t maxrow = buffer_pos.row;
-    if (maxcol < mincol)
-      std::swap(maxcol, mincol);
-    if (maxrow < minrow)
-      std::swap(maxrow, minrow);
-    return (minrow <= current.row && current.row <= maxrow && mincol <= current.col && current.col <= maxcol);
+    int64_t minx, maxx, minrow, maxrow;
+    get_rectangular_selection(minrow, maxrow, minx, maxx, fb, *start_selection, buffer_pos, s);
+
+    int64_t xpos = line_length_up_to_column(fb.content[current.row], current.col - 1, s);
+
+    return (minrow <= current.row && current.row <= maxrow && minx <= xpos && xpos <= maxx);
     }
   return false;
   }
@@ -273,25 +270,25 @@ bool has_rectangular_selection(file_buffer fb)
   return fb.rectangular_selection && has_selection(fb);
   }
 
-bool has_trivial_rectangular_selection(file_buffer fb)
+bool has_trivial_rectangular_selection(file_buffer fb, const env_settings& s)
   {
   if (has_rectangular_selection(fb))
     {
     int64_t minrow, maxrow, mincol, maxcol;
-    get_rectangular_selection(minrow, maxrow, mincol, maxcol, *fb.start_selection, fb.pos);
+    get_rectangular_selection(minrow, maxrow, mincol, maxcol, fb, *fb.start_selection, fb.pos, s);
     return mincol == maxcol;
     }
   return false;
   }
 
-bool has_nontrivial_selection(file_buffer fb)
+bool has_nontrivial_selection(file_buffer fb, const env_settings& s)
   {
   if (has_selection(fb))
     {
     if (!fb.rectangular_selection)
       return true;
     int64_t minrow, maxrow, mincol, maxcol;
-    get_rectangular_selection(minrow, maxrow, mincol, maxcol, *fb.start_selection, fb.pos);
+    get_rectangular_selection(minrow, maxrow, mincol, maxcol, fb, *fb.start_selection, fb.pos, s);
     return mincol != maxcol;
     }
   return false;
@@ -323,14 +320,14 @@ file_buffer push_undo(file_buffer fb)
   return fb;
   }
 
-void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_col, int64_t& max_col, position p1, position p2)
+void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_x, int64_t& max_x, file_buffer fb, position p1, position p2, const env_settings& s)
   {
-  min_col = p1.col;
+  min_x = line_length_up_to_column(fb.content[p1.row], p1.col - 1, s);
+  max_x = line_length_up_to_column(fb.content[p2.row], p2.col - 1, s);
   min_row = p1.row;
-  max_col = p2.col;
   max_row = p2.row;
-  if (max_col < min_col)
-    std::swap(max_col, min_col);
+  if (max_x < min_x)
+    std::swap(max_x, min_x);
   if (max_row < min_row)
     std::swap(max_row, min_row);
   }
@@ -338,12 +335,12 @@ void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_
 
 namespace
   {
-  file_buffer insert_rectangular(file_buffer fb, const std::string& txt, bool save_undo)
+  file_buffer insert_rectangular(file_buffer fb, const std::string& txt, const env_settings& s, bool save_undo)
     {
     fb.modification_mask |= 1;
 
-    int64_t minrow, maxrow, mincol, maxcol;
-    get_rectangular_selection(minrow, maxrow, mincol, maxcol, *fb.start_selection, fb.pos);
+    int64_t minrow, maxrow, minx, maxx;
+    get_rectangular_selection(minrow, maxrow, minx, maxx, fb, *fb.start_selection, fb.pos, s);
 
     std::wstring wtxt = jtk::convert_string_to_wstring(txt);
 
@@ -360,16 +357,20 @@ namespace
       for (int64_t r = minrow; r <= maxrow; ++r)
         {
         auto ln = fb.content[r];
-        if (ln.size() > mincol)
+        int64_t current_col = get_col_from_line_length(fb.content[r], minx, s);
+        int64_t len = line_length_up_to_column(fb.content[r], current_col - 1, s);
+        if (len == minx)
           {
-          ln = ln.take(mincol) + input + ln.drop(mincol);
+          ln = ln.take(current_col) + input + ln.drop(current_col);
           }
         fb.content = fb.content.set(r, ln);
         }
       fb.start_selection->row = minrow;
       fb.pos.row = maxrow;
-      fb.start_selection->col = mincol + input.size();
-      fb.pos.col = fb.start_selection->col;
+
+      fb.start_selection->col = get_col_from_line_length(fb.content[fb.start_selection->row], minx, s) + input.size();
+      fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s) + input.size();
+
       fb.rectangular_selection = true;
       }
     else
@@ -396,9 +397,11 @@ namespace
 
         int64_t r = minrow + current_line;
         auto ln = fb.content[r];
-        if (ln.size() > mincol)
+        int64_t current_col = get_col_from_line_length(fb.content[r], minx, s);
+        int64_t len = line_length_up_to_column(fb.content[r], current_col - 1, s);
+        if (len == minx)          
           {
-          ln = ln.take(mincol) + input + ln.drop(mincol);
+          ln = ln.take(current_col) + input + ln.drop(current_col);
           }
         fb.content = fb.content.set(r, ln);
         ++current_line;
@@ -406,21 +409,21 @@ namespace
       fb.start_selection = std::nullopt;
       fb.rectangular_selection = false;
       fb.pos.row = minrow;
-      fb.pos.col = mincol;
+      fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s);
       }
 
     return fb;
     }
 
-  file_buffer insert_rectangular(file_buffer fb, text txt, bool save_undo)
+  file_buffer insert_rectangular(file_buffer fb, text txt, const env_settings& s, bool save_undo)
     {
     if (txt.empty())
       return fb;
 
     fb.modification_mask |= 1;
 
-    int64_t minrow, maxrow, mincol, maxcol;
-    get_rectangular_selection(minrow, maxrow, mincol, maxcol, *fb.start_selection, fb.pos);
+    int64_t minrow, maxrow, minx, maxx;
+    get_rectangular_selection(minrow, maxrow, minx, maxx, fb, *fb.start_selection, fb.pos, s);
 
     bool single_line = txt.size() == 1;
 
@@ -431,16 +434,18 @@ namespace
       for (int64_t r = minrow; r <= maxrow; ++r)
         {
         auto ln = fb.content[r];
-        if (ln.size() > mincol)
+        int64_t current_col = get_col_from_line_length(fb.content[r], minx, s);
+        int64_t len = line_length_up_to_column(fb.content[r], current_col - 1, s);
+        if (len == minx)
           {
-          ln = ln.take(mincol) + input + ln.drop(mincol);
+          ln = ln.take(current_col) + input + ln.drop(current_col);
           }
         fb.content = fb.content.set(r, ln);
         }
       fb.start_selection->row = minrow;
       fb.pos.row = maxrow;
-      fb.start_selection->col = mincol + input.size();
-      fb.pos.col = fb.start_selection->col;
+      fb.start_selection->col = get_col_from_line_length(fb.content[fb.start_selection->row], minx, s) + input.size();
+      fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s) + input.size();
       fb.rectangular_selection = true;
       }
     else
@@ -457,9 +462,11 @@ namespace
 
         int64_t r = minrow + current_line;
         auto ln = fb.content[r];
-        if (ln.size() > mincol)
+        int64_t current_col = get_col_from_line_length(fb.content[r], minx, s);
+        int64_t len = line_length_up_to_column(fb.content[r], current_col - 1, s);
+        if (len == minx)
           {
-          ln = ln.take(mincol) + input + ln.drop(mincol);
+          ln = ln.take(current_col) + input + ln.drop(current_col);
           }
         fb.content = fb.content.set(r, ln);
         ++current_line;
@@ -468,11 +475,16 @@ namespace
       fb.start_selection = std::nullopt;
       fb.rectangular_selection = false;
       fb.pos.row = minrow;
-      fb.pos.col = mincol;
+      fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s);
       }
 
     return fb;
     }
+  }
+
+int64_t get_x_position(file_buffer fb, const env_settings& s)
+  {
+  return fb.content.empty() ? 0 : line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
   }
 
 file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s, bool save_undo)
@@ -480,11 +492,11 @@ file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s
   if (save_undo)
     fb = push_undo(fb);
 
-  if (has_nontrivial_selection(fb))
+  if (has_nontrivial_selection(fb, s))
     fb = erase(fb, s, false);
 
   if (has_rectangular_selection(fb))
-    return insert_rectangular(fb, txt, false);
+    return insert_rectangular(fb, txt, s, false);
 
   fb.start_selection = std::nullopt;
 
@@ -535,7 +547,7 @@ file_buffer insert(file_buffer fb, const std::string& txt, const env_settings& s
       fb.pos.col += input.size();
       }
     }
-  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  fb.xpos = get_x_position(fb, s);
   return fb;
   }
 
@@ -544,11 +556,11 @@ file_buffer insert(file_buffer fb, text txt, const env_settings& s, bool save_un
   if (save_undo)
     fb = push_undo(fb);
 
-  if (has_nontrivial_selection(fb))
+  if (has_nontrivial_selection(fb, s))
     fb = erase(fb, s, false);
 
   if (has_rectangular_selection(fb))
-    return insert_rectangular(fb, txt, false);
+    return insert_rectangular(fb, txt, s, false);
 
   fb.start_selection = std::nullopt;
 
@@ -589,7 +601,7 @@ file_buffer insert(file_buffer fb, text txt, const env_settings& s, bool save_un
     txt = txt.set(txt.size() - 1, ln2);
     fb.content = fb.content.take(pos.row) + txt + fb.content.drop(pos.row + 1);
     }
-  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  fb.xpos = get_x_position(fb, s);
   return fb;
   }
 
@@ -620,7 +632,7 @@ file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo)
       fb.content = fb.content.erase(pos.row).set(pos.row - 1, l);
       --fb.pos.row;
       }
-    fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+    fb.xpos = get_x_position(fb, s);
     }
   else
     {
@@ -658,30 +670,38 @@ file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo)
         {
         p1 = fb.pos;
         p2 = *fb.start_selection;
-        int64_t mincol, maxcol, minrow, maxrow;
-        get_rectangular_selection(minrow, maxrow, mincol, maxcol, p1, p2);
-        if (mincol == maxcol) // trivial rectangular selection
+        int64_t minx, maxx, minrow, maxrow;
+        get_rectangular_selection(minrow, maxrow, minx, maxx, fb, p1, p2, s);
+        if (minx == maxx) // trivial rectangular selection
           {
-          if (mincol > 0)
+          if (minx > 0)
             {
             for (int64_t r = minrow; r <= maxrow; ++r)
               {
-              fb.content = fb.content.set(r, fb.content[r].take(mincol - 1) + fb.content[r].drop(maxcol));
+              int64_t current_col = get_col_from_line_length(fb.content[r], minx, s);
+              int64_t len = line_length_up_to_column(fb.content[r], current_col - 1, s);
+              if (len == minx)
+                fb.content = fb.content.set(r, fb.content[r].take(current_col - 1) + fb.content[r].drop(current_col));
               }
-            fb.start_selection->col = mincol - 1;
-            fb.pos.col = mincol - 1;
+            fb.start_selection->col = get_col_from_line_length(fb.content[fb.start_selection->row], minx, s) - 1;
+            fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s) - 1;
             }
           }
         else
           {
           for (int64_t r = minrow; r <= maxrow; ++r)
             {
-            fb.content = fb.content.set(r, fb.content[r].take(mincol) + fb.content[r].drop(maxcol + 1));
+            int64_t min_col = get_col_from_line_length(fb.content[r], minx, s);
+            int64_t max_col = get_col_from_line_length(fb.content[r], maxx, s);
+            int64_t len_min = line_length_up_to_column(fb.content[r], min_col - 1, s);
+            int64_t len_max = line_length_up_to_column(fb.content[r], max_col - 1, s);
+            if (len_min <= maxx && len_max >= minx)
+              fb.content = fb.content.set(r, fb.content[r].take(min_col) + fb.content[r].drop(max_col + 1));
             }
-          fb.start_selection->col = mincol;
-          fb.pos.col = mincol;
+          fb.start_selection->col = get_col_from_line_length(fb.content[fb.start_selection->row], minx, s);
+          fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s);
           }
-        fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+        fb.xpos = get_x_position(fb, s);
         }
       }
     }
@@ -711,31 +731,38 @@ file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo)
       auto l = fb.content[pos.row].pop_back() + fb.content[pos.row + 1];
       fb.content = fb.content.erase(pos.row + 1).set(pos.row, l);
       }
-    fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+    else if (pos.col == fb.content[pos.row].size()-1)// last line, last item
+      {
+      fb.content = fb.content.set(pos.row, fb.content[pos.row].pop_back());
+      }
+    fb.xpos = get_x_position(fb, s);
     return fb;
     }
   else
     {
-    if (has_trivial_rectangular_selection(fb))
+    if (has_trivial_rectangular_selection(fb, s))
       {
       position p1 = fb.pos;
       position p2 = *fb.start_selection;
-      int64_t mincol, maxcol, minrow, maxrow;
-      get_rectangular_selection(minrow, maxrow, mincol, maxcol, p1, p2);
+      int64_t minx, maxx, minrow, maxrow;
+      get_rectangular_selection(minrow, maxrow, minx, maxx, fb, p1, p2, s);
       for (int64_t r = minrow; r <= maxrow; ++r)
         {
-        fb.content = fb.content.set(r, fb.content[r].take(mincol) + fb.content[r].drop(maxcol + 1));
+        int64_t current_col = get_col_from_line_length(fb.content[r], minx, s);
+        int64_t len = line_length_up_to_column(fb.content[r], current_col - 1, s);
+        if (len == minx && (current_col < fb.content[r].size() - 1 || (current_col == fb.content[r].size() - 1 && r == fb.content.size()-1) ))
+          fb.content = fb.content.set(r, fb.content[r].take(current_col) + fb.content[r].drop(current_col + 1));
         }
-      fb.start_selection->col = mincol;
-      fb.pos.col = mincol;
-      fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+      fb.start_selection->col = get_col_from_line_length(fb.content[fb.start_selection->row], minx, s);
+      fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s);
+      fb.xpos = get_x_position(fb, s);
       return fb;
       }
     return erase(fb, s, false);
     }
   }
 
-text get_selection(file_buffer fb)
+text get_selection(file_buffer fb, const env_settings& s)
   {
   auto p1 = get_actual_position(fb);
   if (!has_selection(fb))
@@ -773,7 +800,7 @@ text get_selection(file_buffer fb)
     p1 = fb.pos;
     p2 = *fb.start_selection;
     int64_t mincol, maxcol, minrow, maxrow;
-    get_rectangular_selection(minrow, maxrow, mincol, maxcol, p1, p2);
+    get_rectangular_selection(minrow, maxrow, mincol, maxcol, fb, p1, p2, s);
     for (int64_t r = minrow; r <= maxrow; ++r)
       {
       auto ln = fb.content[r].take(maxcol + 1).drop(mincol);
@@ -805,7 +832,7 @@ file_buffer undo(file_buffer fb, const env_settings& s)
     fb.rectangular_selection = ss.rectangular_selection;
     fb.history = fb.history.push_back(ss);
     }
-  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  fb.xpos = get_x_position(fb, s);
   return fb;
   }
 
@@ -822,7 +849,7 @@ file_buffer redo(file_buffer fb, const env_settings& s)
     fb.rectangular_selection = ss.rectangular_selection;
     fb.history = fb.history.push_back(ss);
     }
-  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  fb.xpos = get_x_position(fb, s);
   return fb;
   }
 
@@ -836,7 +863,7 @@ file_buffer select_all(file_buffer fb, const env_settings& s)
   fb.start_selection = pos;
   fb.pos.row = fb.content.size() - 1;
   fb.pos.col = fb.content.back().size();
-  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  fb.xpos = get_x_position(fb, s);
   return fb;
   }
 
@@ -855,7 +882,7 @@ file_buffer move_left(file_buffer fb, const env_settings& s)
     }
   else
     fb.pos.col = actual.col - 1;
-  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  fb.xpos = get_x_position(fb, s);
   return fb;
   }
 
@@ -876,7 +903,7 @@ file_buffer move_right(file_buffer fb, const env_settings& s)
     assert(fb.pos.row == fb.content.size() - 1);
     assert(fb.pos.col == fb.content.back().size());
     }
-  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  fb.xpos = get_x_position(fb, s);
   return fb;
   }
 
@@ -918,7 +945,7 @@ file_buffer move_page_down(file_buffer fb, int64_t rows, const env_settings& s)
     return fb;
   fb.pos.row += rows;
   if (fb.pos.row >= fb.content.size())
-    fb.pos.row = fb.content.size()-1;
+    fb.pos.row = fb.content.size() - 1;
   int64_t new_col = get_col_from_line_length(fb.content[fb.pos.row], fb.xpos, s);
   fb.pos.col = new_col;
   return fb;
@@ -945,7 +972,7 @@ file_buffer move_end(file_buffer fb, const env_settings& s)
     if (fb.content.back().back() != L'\n')
       ++fb.pos.col;
     }
-  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  fb.xpos = get_x_position(fb, s);
   return fb;
   }
 
@@ -979,6 +1006,6 @@ position get_last_position(file_buffer fb)
 file_buffer update_position(file_buffer fb, position pos, const env_settings& s)
   {
   fb.pos = pos;
-  fb.xpos = line_length_up_to_column(fb.content[fb.pos.row], fb.pos.col - 1, s);
+  fb.xpos = get_x_position(fb, s);
   return fb;
   }

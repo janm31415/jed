@@ -81,17 +81,19 @@ int64_t line_length_up_to_column(line ln, int64_t column, const env_settings& s)
 
 int64_t get_col_from_line_length(line ln, int64_t length, const env_settings& s);
 
-bool in_selection(file_buffer fb, position current, position cursor, position buffer_pos, std::optional<position> start_selection, bool rectangular);
+int64_t get_x_position(file_buffer fb, const env_settings& s);
+
+bool in_selection(file_buffer fb, position current, position cursor, position buffer_pos, std::optional<position> start_selection, bool rectangular, const env_settings& s);
 
 bool has_selection(file_buffer fb);
 
 bool has_rectangular_selection(file_buffer fb);
 
-bool has_trivial_rectangular_selection(file_buffer fb);
+bool has_trivial_rectangular_selection(file_buffer fb, const env_settings& s);
 
-bool has_nontrivial_selection(file_buffer fb);
+bool has_nontrivial_selection(file_buffer fb, const env_settings& s);
 
-void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_col, int64_t& max_col, position p1, position p2);
+void get_rectangular_selection(int64_t& min_row, int64_t& max_row, int64_t& min_x, int64_t& max_x, file_buffer fb, position p1, position p2, const env_settings& s);
 
 position get_actual_position(file_buffer fb);
 
@@ -115,7 +117,7 @@ file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo = 
 
 file_buffer push_undo(file_buffer fb);
 
-text get_selection(file_buffer fb);
+text get_selection(file_buffer fb, const env_settings& s);
 
 file_buffer undo(file_buffer fb, const env_settings& s);
 
