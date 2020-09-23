@@ -650,9 +650,9 @@ app_state draw(app_state state, const settings& s)
   draw_title_bar(state);
 
 
-  draw_buffer(state.buffer, state.scroll_row, SET_TEXT_EDITOR, s, state.operation != op_command_editing);
+  draw_buffer(state.buffer, state.scroll_row, SET_TEXT_EDITOR, s, (state.operation != op_command_editing) || has_nontrivial_selection(state.buffer, convert(s)));
 
-  draw_command_buffer(state.command_buffer, state.command_scroll_row, s, state.operation == op_command_editing);
+  draw_command_buffer(state.command_buffer, state.command_scroll_row, s, (state.operation == op_command_editing) || has_nontrivial_selection(state.command_buffer, convert(s)));
 
   draw_scroll_bars(state, s);
 
@@ -2421,23 +2421,19 @@ std::optional<app_state> select_word(app_state state, int x, int y, const settin
 std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
   screen_ex_pixel p = get_ex(y, x);
+  mouse.left_button_down = true;
 
   if (p.type == SET_SCROLLBAR_EDITOR)
     {
-    int offsetx, offsety, cols, rows;
-    get_editor_window_offset(offsetx, offsety, s);
-    get_editor_window_size(rows, cols, s);
-    double fraction = (double)(y - offsety) / (double)rows;
-    int steps = (int)(fraction * rows);
-    if (steps < 1)
-      steps = 1;
-    return move_editor_window_up_down(state, -steps, s);
+    return state;
     }
 
   if (double_click)
+    {
+    mouse.left_button_down = false;
     return select_word(state, x, y, s);
-
-  mouse.left_button_down = true;
+    }
+  
   mouse.left_drag_start = find_mouse_text_pick(x, y);
   if (mouse.left_drag_start.type == SET_TEXT_EDITOR)
     {
@@ -2447,9 +2443,8 @@ std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, b
       state.buffer.start_selection = mouse.left_drag_start.pos;
       state.buffer.rectangular_selection = false;
       }
-    //state.buffer.pos = mouse.left_drag_start.pos;
     state.buffer = update_position(state.buffer, mouse.left_drag_start.pos, convert(s));
-    state.command_buffer = clear_selection(state.command_buffer);
+    //state.command_buffer = clear_selection(state.command_buffer);
     keyb_data.selecting = false;
     }
   if (mouse.left_drag_start.type == SET_TEXT_COMMAND)
@@ -2460,9 +2455,8 @@ std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, b
       state.command_buffer.start_selection = mouse.left_drag_start.pos;
       state.command_buffer.rectangular_selection = false;
       }
-    //state.command_buffer.pos = mouse.left_drag_start.pos;
     state.command_buffer = update_position(state.command_buffer, mouse.left_drag_start.pos, convert(s));
-    state.buffer = clear_selection(state.buffer);
+    //state.buffer = clear_selection(state.buffer);
     keyb_data.selecting = false;
     }
   mouse.left_drag_start = get_ex(y, x);
@@ -2473,9 +2467,8 @@ std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, b
       state.operation_buffer.start_selection = mouse.left_drag_start.pos;
       state.operation_buffer.rectangular_selection = false;
       }
-    //state.operation_buffer.pos = mouse.left_drag_start.pos;
     state.operation_buffer = update_position(state.operation_buffer, mouse.left_drag_start.pos, convert(s));
-    state.buffer = clear_selection(state.buffer);
+    //state.buffer = clear_selection(state.buffer);
     keyb_data.selecting = false;
     }
   return state;
@@ -2490,19 +2483,6 @@ std::optional<app_state> middle_mouse_button_down(app_state state, int x, int y,
 std::optional<app_state> right_mouse_button_down(app_state state, int x, int y, bool double_click, const settings& s)
   {
   screen_ex_pixel p = get_ex(y, x);
-
-  if (p.type == SET_SCROLLBAR_EDITOR)
-    {
-    int offsetx, offsety, cols, rows;
-    get_editor_window_offset(offsetx, offsety, s);
-    get_editor_window_size(rows, cols, s);
-    double fraction = (double)(y - offsety) / (double)rows;
-    int steps = (int)(fraction * rows);
-    if (steps < 1)
-      steps = 1;
-    return move_editor_window_up_down(state, steps, s);
-    }
-
   mouse.right_button_down = true;
   return state;
   }
@@ -2513,6 +2493,19 @@ std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, con
     return state;
   mouse.left_dragging = false;
   mouse.left_button_down = false;
+
+  auto p = get_ex(y, x);
+  if (p.type == SET_SCROLLBAR_EDITOR)
+    {
+    int offsetx, offsety, cols, rows;
+    get_editor_window_offset(offsetx, offsety, s);
+    get_editor_window_size(rows, cols, s);
+    double fraction = (double)(y - offsety) / (double)rows;
+    int steps = (int)(fraction * rows);
+    if (steps < 1)
+      steps = 1;
+    return move_editor_window_up_down(state, -steps, s);
+    }
 
   //if (p.type == SET_TEXT_EDITOR)
   //  {
@@ -2575,6 +2568,18 @@ std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, se
   mouse.right_button_down = false;
 
   screen_ex_pixel p = get_ex(y, x);
+
+  if (p.type == SET_SCROLLBAR_EDITOR)
+    {
+    int offsetx, offsety, cols, rows;
+    get_editor_window_offset(offsetx, offsety, s);
+    get_editor_window_size(rows, cols, s);
+    double fraction = (double)(y - offsety) / (double)rows;
+    int steps = (int)(fraction * rows);
+    if (steps < 1)
+      steps = 1;
+    return move_editor_window_up_down(state, steps, s);
+    }
 
   if (p.type == SET_TEXT_EDITOR)
     {
