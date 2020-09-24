@@ -6,6 +6,7 @@
 #include "mouse.h"
 #include "pdcex.h"
 #include "process.h"
+#include "syntax_highlight.h"
 #include "utils.h"
 
 #include <jtk/file_utils.h>
@@ -13,6 +14,7 @@
 #include <map>
 #include <functional>
 #include <sstream>
+#include <cctype>
 
 #include <SDL.h>
 #include <SDL_syswm.h>
@@ -39,6 +41,32 @@ env_settings convert(const settings& s)
   out.tab_space = s.tab_space;
   out.show_all_characters = s.show_all_characters;
   return out;
+  }
+
+const syntax_highlighter& get_syntax_highlighter()
+  {
+  static syntax_highlighter s;
+  return s;
+  }
+
+file_buffer set_multiline_comments(file_buffer fb)
+  {
+  auto ext = jtk::get_extension(fb.name);
+  auto filename = jtk::get_filename(fb.name);
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+  std::transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+  const syntax_highlighter& shl = get_syntax_highlighter();
+  comment_data cd;
+  if (shl.extension_or_filename_has_syntax_highlighter(ext))
+    cd = shl.get_syntax_highlighter(ext);
+  else if (shl.extension_or_filename_has_syntax_highlighter(filename))
+    cd = shl.get_syntax_highlighter(filename);
+  fb.multiline_begin = cd.multiline_begin;
+  fb.multiline_end = cd.multiline_end;
+  fb.multistring_begin = cd.multistring_begin;
+  fb.multistring_end = cd.multistring_end;
+  fb.single_line = cd.single_line;
+  return fb;
   }
 
 app_state clear_operation_buffer(app_state state);
@@ -202,16 +230,15 @@ Returns an x offset (let's call it multiline_offset_x) such that
 equals the x position in the screen of where the next character should come.
 This makes it possible to further fill the line with spaces after calling "draw_line".
 */
-int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s)
+int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s, const env_settings& senv)
   {
-  auto senv = convert(s);
   line ln = fb.content[current.row];
   int multiline_tag = (int)multiline_tag_editor;
   if (set_type == SET_TEXT_COMMAND)
     multiline_tag = (int)multiline_tag_command;
 
   wide_characters_offset = 0;
-  bool has_selection = start_selection != std::nullopt;
+  bool has_selection = (start_selection != std::nullopt) && (cursor.row >= 0) && (cursor.col >= 0);
 
   int64_t len = line_length_up_to_column(ln, maxcol - 1, senv);
 
@@ -268,9 +295,9 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
   if (multiline)
     {
     int pagewidth = maxcol - 2 - MULTILINEOFFSET;
-    int64_t len_to_cursor = line_length_up_to_column(ln, multiline_ref_col-1, senv);
+    int64_t len_to_cursor = line_length_up_to_column(ln, multiline_ref_col - 1, senv);
     page = len_to_cursor / pagewidth;
-    if (page != 0) 
+    if (page != 0)
       {
       if (len_to_cursor == multiline_ref_col - 1) // no characters wider than 1 so far.
         {
@@ -324,7 +351,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
       addch(character_to_pdc_char(character, cnt, s));
       ++drawn;
       }
-    wide_characters_offset += cwidth - 1;    
+    wide_characters_offset += cwidth - 1;
     ++current.col;
     }
 
@@ -427,7 +454,7 @@ void draw_help_text(app_state state)
   }
 
 
-void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, bool active)
+void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, bool active, const env_settings& senv)
   {
   int offset_x = 0;
   int offset_y = 0;
@@ -482,7 +509,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s, senv);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if (!has_nontrivial_selection && (current == cursor))
@@ -509,7 +536,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
     }
   }
 
-void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, const settings& s, bool active)
+void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, const settings& s, bool active, const env_settings& senv)
   {
   int offset_x = 0;
   int offset_y = 0;
@@ -550,7 +577,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, s);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, s, senv);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if (!has_nontrivial_selection && (current == cursor))
@@ -649,10 +676,12 @@ app_state draw(app_state state, const settings& s)
 
   draw_title_bar(state);
 
+  auto senv = convert(s);
 
-  draw_buffer(state.buffer, state.scroll_row, SET_TEXT_EDITOR, s, (state.operation != op_command_editing) || has_nontrivial_selection(state.buffer, convert(s)));
 
-  draw_command_buffer(state.command_buffer, state.command_scroll_row, s, (state.operation == op_command_editing) || has_nontrivial_selection(state.command_buffer, convert(s)));
+  draw_buffer(state.buffer, state.scroll_row, SET_TEXT_EDITOR, s, (state.operation != op_command_editing) || has_nontrivial_selection(state.buffer, senv), senv);
+
+  draw_command_buffer(state.command_buffer, state.command_scroll_row, s, (state.operation == op_command_editing) || has_nontrivial_selection(state.command_buffer, senv), senv);
 
   draw_scroll_bars(state, s);
 
@@ -679,7 +708,7 @@ app_state draw(app_state state, const settings& s)
     int wide_characters_offset = 0;
     int multiline_offset_x = txt.length();
     if (!state.operation_buffer.content.empty())
-      multiline_offset_x = draw_line(wide_characters_offset, state.operation_buffer, current, cursor, state.operation_buffer.pos, DEFAULT_COLOR | A_BOLD, rows - 3, multiline_offset_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_TEXT_OPERATION, s);
+      multiline_offset_x = draw_line(wide_characters_offset, state.operation_buffer, current, cursor, state.operation_buffer.pos, DEFAULT_COLOR | A_BOLD, rows - 3, multiline_offset_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_TEXT_OPERATION, s, senv);
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
       {
@@ -890,7 +919,7 @@ app_state move_up(app_state state, const settings& s)
   if (state.operation == op_editing)
     return move_up_editor(state, s);
   else if (state.operation == op_command_editing)
-    return move_up_command(state, s); 
+    return move_up_command(state, s);
   return state;
   }
 
@@ -1316,6 +1345,8 @@ app_state open_file(app_state state, const settings& s)
     std::string message = "Opened file " + filename;
     state.message = string_to_line(message);
     }
+  state.buffer = set_multiline_comments(state.buffer);
+  state.buffer = init_lexer_status(state.buffer);
   return check_scroll_position(state, s);
   }
 
@@ -1344,6 +1375,17 @@ app_state save_file(app_state state)
     {
     std::string error_message = "Error saving file " + filename;
     state.message = string_to_line(error_message);
+    }
+  std::string multiline_begin = state.buffer.multiline_begin;
+  std::string multiline_end = state.buffer.multiline_end;
+  std::string single_line = state.buffer.single_line;
+  state.buffer = set_multiline_comments(state.buffer);
+  if (multiline_begin != state.buffer.multiline_begin ||
+    multiline_end != state.buffer.multiline_end ||
+    single_line != state.buffer.single_line
+    )
+    {
+    state.buffer = init_lexer_status(state.buffer);
     }
   return state;
   }
@@ -1378,15 +1420,16 @@ app_state find(app_state state, settings& s)
 
 app_state replace(app_state state, settings& s)
   {
+  auto senv = convert(s);
   state.message = string_to_line("[Replace]");
   state.operation = op_editing;
   std::wstring replace_string;
-  state.buffer = erase_right(state.buffer, convert(s), true);
+  state.buffer = erase_right(state.buffer, senv, true);
   if (!state.operation_buffer.content.empty())
     replace_string = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
   s.last_replace = jtk::convert_wstring_to_string(replace_string);
   if (state.buffer.pos != get_last_position(state.buffer))
-    state.buffer = insert(state.buffer, replace_string, convert(s), false);  
+    state.buffer = insert(state.buffer, replace_string, senv, false);
   return check_scroll_position(state, s);
   }
 
@@ -1398,7 +1441,7 @@ app_state replace_all(app_state state, settings& s)
   if (!state.operation_buffer.content.empty())
     replace_string = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
   s.last_replace = jtk::convert_wstring_to_string(replace_string);
-  std::wstring find_string = jtk::convert_string_to_wstring(s.last_find);  
+  std::wstring find_string = jtk::convert_string_to_wstring(s.last_find);
   state.buffer.pos = position(0, 0); // go to start
   state.buffer.start_selection = std::nullopt;
   state.buffer.rectangular_selection = false;
@@ -1412,14 +1455,14 @@ app_state replace_all(app_state state, settings& s)
     state.buffer = erase_right(state.buffer, senv, false);
     state.buffer = insert(state.buffer, replace_string, senv, false);
     state.buffer = find_text(state.buffer, find_string);
-    }  
+    }
   return check_scroll_position(state, s);
   }
 
 app_state prepare_replace(app_state state, const settings& s)
   {
   state = clear_operation_buffer(state);
-  state.operation = op_replace;  
+  state.operation = op_replace;
   state.operation_buffer = insert(state.operation_buffer, s.last_replace, convert(s), false);
   return check_scroll_position(state, s);
   }
@@ -1427,14 +1470,14 @@ app_state prepare_replace(app_state state, const settings& s)
 app_state find_next(app_state state, settings& s)
   {
   state.message = string_to_line("[Find next]");
-  state.operation = op_editing;  
+  state.operation = op_editing;
   state.buffer = find_text(state.buffer, s.last_find);
   return check_scroll_position(state, s);
   }
 
 app_state gotoline(app_state state, const settings& s)
   {
-  state.operation = op_editing;  
+  state.operation = op_editing;
   std::stringstream messagestr;
   messagestr << "[Go to line ";
   if (!state.operation_buffer.content.empty())
@@ -1449,7 +1492,7 @@ app_state gotoline(app_state state, const settings& s)
       {
       state.buffer.pos.row = r - 1;
       state.buffer.pos.col = 0;
-      state.buffer = clear_selection(state.buffer);      
+      state.buffer = clear_selection(state.buffer);
       if (state.buffer.pos.row >= state.buffer.content.size())
         {
         if (state.buffer.content.empty())
@@ -1689,23 +1732,6 @@ std::optional<app_state> command_select_all(app_state state, settings& s)
   return state;
   }
 
-std::optional<app_state> make_help_buffer(app_state state, const settings& s)
-  {
-  std::string help_file = get_file_in_executable_path("Help.txt");
-  state = clear_operation_buffer(state);
-  if (jtk::file_exists(help_file))
-    {
-    state.operation_buffer = read_from_file(help_file);
-    }
-  else
-    {
-    std::string txt = "error: no help file found";
-    state.operation_buffer = insert(state.operation_buffer, txt, convert(s), false);
-    }
-  state.message = string_to_line("[Help]");
-  return state;
-  }
-
 std::optional<app_state> move_editor_window_up_down(app_state state, int steps, const settings& s)
   {
   int rows, cols;
@@ -1782,7 +1808,7 @@ std::wstring find_bottom_line_help_command(int x, int y)
     move(y, i);
     chtype ch[2];
     winchnstr(stdscr, ch, 1);
-    command.push_back((wchar_t)(ch[0]&A_CHARTEXT));
+    command.push_back((wchar_t)(ch[0] & A_CHARTEXT));
     }
   return clean_command(command);
   }
@@ -1810,7 +1836,7 @@ std::optional<app_state> command_help(app_state state, settings& s)
 std::optional<app_state> command_find(app_state state, settings& s)
   {
   state.operation = op_find;
-  return make_find_buffer(state, s);  
+  return make_find_buffer(state, s);
   }
 
 std::optional<app_state> command_replace(app_state state, settings& s)
@@ -1996,7 +2022,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Find", command_find},
   {L"Get", command_get},
   {L"Goto", command_goto},
-  {L"Help", command_help},  
+  {L"Help", command_help},
   {L"MatrixTheme", command_matrix_theme},
   {L"New", command_new},
   {L"No", command_no},
@@ -2116,7 +2142,7 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
     {
     std::string error_message = "Could not create child process";
     state.message = string_to_line(error_message);
-    }
+  }
   destroy_process(process, 0);
   return state;
   }
@@ -2183,7 +2209,7 @@ std::string compose_folder_from_split(const std::vector<std::string>& split)
   }
 
 std::optional<app_state> load_folder(app_state state, const std::string& folder, settings& s)
-  {  
+  {
   auto split = split_folder(folder);
   split = simplify_split_folder(split);
   std::string simplified_folder_name = compose_folder_from_split(split);
@@ -2229,7 +2255,7 @@ std::optional<app_state> load(app_state state, const std::wstring& command, sett
     folder = jtk::get_executable_path();
   if (folder.back() != '\\' && folder.back() != '/')
     folder.push_back('/');
-    
+
   std::string cmd = jtk::convert_wstring_to_string(command);
   if (!cmd.empty() && cmd.front() == '/')
     cmd.erase(cmd.begin());
@@ -2239,7 +2265,7 @@ std::optional<app_state> load(app_state state, const std::wstring& command, sett
     {
     return load_file(state, newfilename, s);
     }
-  
+
   if (jtk::is_directory(newfilename))
     {
     return load_folder(state, newfilename, s);
@@ -2249,7 +2275,7 @@ std::optional<app_state> load(app_state state, const std::wstring& command, sett
     {
     return load_file(state, jtk::convert_wstring_to_string(command), s);
     }
-    
+
   if (jtk::is_directory(jtk::convert_wstring_to_string(command)))
     {
     return load_folder(state, jtk::convert_wstring_to_string(command), s);
@@ -2386,7 +2412,7 @@ std::pair<int64_t, int64_t> get_word_from_position(file_buffer fb, position pos)
     }
 
   selection.first = p1;
-  selection.second = p2-1;
+  selection.second = p2 - 1;
 
   return selection;
   }
@@ -2401,7 +2427,7 @@ std::optional<app_state> select_word(app_state state, int x, int y, const settin
     }
   else if (p.type == SET_TEXT_COMMAND)
     {
-    selection = get_word_from_position(state.command_buffer, p.pos);    
+    selection = get_word_from_position(state.command_buffer, p.pos);
     }
   if (selection.first >= 0 && selection.second >= 0)
     {
@@ -2433,7 +2459,7 @@ std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, b
     mouse.left_button_down = false;
     return select_word(state, x, y, s);
     }
-  
+
   mouse.left_drag_start = find_mouse_text_pick(x, y);
   if (mouse.left_drag_start.type == SET_TEXT_EDITOR)
     {
@@ -2923,12 +2949,12 @@ std::optional<app_state> process_input(app_state state, settings& s)
         {
         int x = event.button.x / font_width;
         int y = event.button.y / font_height;
-        if (event.button.button == 1 && mouse.left_button_down)          
-          return left_mouse_button_up(state, x, y, s);          
+        if (event.button.button == 1 && mouse.left_button_down)
+          return left_mouse_button_up(state, x, y, s);
         else if (event.button.button == 2 && mouse.middle_button_down)
           return middle_mouse_button_up(state, x, y, s);
-        else if (event.button.button == 3 && mouse.right_button_down)          
-          return right_mouse_button_up(state, x, y, s);    
+        else if (event.button.button == 3 && mouse.right_button_down)
+          return right_mouse_button_up(state, x, y, s);
         else if (((event.button.button == 1) || (event.button.button == 3)) && mouse.middle_button_down)
           return middle_mouse_button_up(state, x, y, s);
         break;
@@ -3000,6 +3026,8 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
     state.buffer = make_empty_buffer();
   else
     state.buffer = read_from_file(s.last_active_folder);
+  state.buffer = set_multiline_comments(state.buffer);
+  state.buffer = init_lexer_status(state.buffer);
   state.command_buffer = insert(make_empty_buffer(), s.command_text, convert(s), false);
   state.operation = op_editing;
   state.scroll_row = 0;

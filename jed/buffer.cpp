@@ -311,6 +311,7 @@ file_buffer push_undo(file_buffer fb)
   {
   snapshot ss;
   ss.content = fb.content;
+  ss.lex = fb.lex;
   ss.pos = fb.pos;
   ss.start_selection = fb.start_selection;
   ss.modification_mask = fb.modification_mask;
@@ -409,7 +410,7 @@ namespace
       fb.pos.row = minrow;
       fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s);
       }
-
+    fb = update_lexer_status(fb, minrow, maxrow);
     return fb;
     }
 
@@ -475,7 +476,7 @@ namespace
       fb.pos.row = minrow;
       fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s);
       }
-
+    fb = update_lexer_status(fb, minrow, maxrow);
     return fb;
     }
   }
@@ -501,9 +502,11 @@ file_buffer insert(file_buffer fb, std::wstring wtxt, const env_settings& s, boo
   fb.modification_mask |= 1;
 
   auto pos = get_actual_position(fb);
-
+  int nr_of_lines_inserted = 0;
+  int64_t first_insertion_row = pos.row;
   while (!wtxt.empty())
     {
+    ++nr_of_lines_inserted;
     auto endline_position = wtxt.find_first_of(L'\n');
     if (endline_position != std::wstring::npos)
       ++endline_position;
@@ -544,6 +547,7 @@ file_buffer insert(file_buffer fb, std::wstring wtxt, const env_settings& s, boo
       fb.pos.col += input.size();
       }
     }
+  fb = update_lexer_status(fb, first_insertion_row, first_insertion_row + nr_of_lines_inserted - 1);
   fb.xpos = get_x_position(fb, s);
   return fb;
   }
@@ -627,6 +631,7 @@ file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo)
       {
       fb.content = fb.content.set(pos.row, fb.content[pos.row].erase(pos.col - 1));
       --fb.pos.col;
+      fb = update_lexer_status(fb, pos.row);
       }
     else if (pos.row > 0)
       {
@@ -634,6 +639,7 @@ file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo)
       auto l = fb.content[pos.row - 1].pop_back() + fb.content[pos.row];
       fb.content = fb.content.erase(pos.row).set(pos.row - 1, l);
       --fb.pos.row;
+      fb = update_lexer_status(fb, pos.row-1, pos.row);
       }
     fb.xpos = get_x_position(fb, s);
     }
@@ -704,6 +710,7 @@ file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo)
           fb.start_selection->col = get_col_from_line_length(fb.content[fb.start_selection->row], minx, s);
           fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s);
           }
+        fb = update_lexer_status(fb, minrow, maxrow);
         fb.xpos = get_x_position(fb, s);
         }
       }
@@ -728,11 +735,13 @@ file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo)
     if (pos.col < fb.content[pos.row].size() - 1)
       {
       fb.content = fb.content.set(pos.row, fb.content[pos.row].erase(pos.col));
+      fb = update_lexer_status(fb, pos.row);
       }
     else if (pos.row < fb.content.size() - 1)
       {
       auto l = fb.content[pos.row].pop_back() + fb.content[pos.row + 1];
       fb.content = fb.content.erase(pos.row + 1).set(pos.row, l);
+      fb = update_lexer_status(fb, pos.row, pos.row+1);
       }
     else if (pos.col == fb.content[pos.row].size() - 1)// last line, last item
       {
@@ -756,6 +765,7 @@ file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo)
         if (len == minx && (current_col < fb.content[r].size() - 1 || (current_col == fb.content[r].size() - 1 && r == fb.content.size() - 1)))
           fb.content = fb.content.set(r, fb.content[r].take(current_col) + fb.content[r].drop(current_col + 1));
         }
+      fb = update_lexer_status(fb, minrow, maxrow);
       fb.start_selection->col = get_col_from_line_length(fb.content[fb.start_selection->row], minx, s);
       fb.pos.col = get_col_from_line_length(fb.content[fb.pos.row], minx, s);
       fb.xpos = get_x_position(fb, s);
@@ -829,6 +839,7 @@ file_buffer undo(file_buffer fb, const env_settings& s)
     --fb.undo_redo_index;
     snapshot ss = fb.history[(uint32_t)fb.undo_redo_index];
     fb.content = ss.content;
+    fb.lex = ss.lex;
     fb.pos = ss.pos;
     fb.modification_mask = ss.modification_mask;
     fb.start_selection = ss.start_selection;
@@ -846,6 +857,7 @@ file_buffer redo(file_buffer fb, const env_settings& s)
     ++fb.undo_redo_index;
     snapshot ss = fb.history[(uint32_t)fb.undo_redo_index];
     fb.content = ss.content;
+    fb.lex = ss.lex;
     fb.pos = ss.pos;
     fb.modification_mask = ss.modification_mask;
     fb.start_selection = ss.start_selection;
@@ -1093,12 +1105,12 @@ file_buffer find_text(file_buffer fb, text txt)
   wchar_t first_text_char = txt[text_pos.row][text_pos.col];
   while (pos != lastpos)
     {
-    wchar_t current_char = fb.content[pos.row][pos.col];  
+    wchar_t current_char = fb.content[pos.row][pos.col];
     if (current_char == current_text_char)
       {
       if (text_pos.col == 0 && text_pos.row == 0)
         first_encounter = pos;
-      text_pos = get_next_position(txt, text_pos);      
+      text_pos = get_next_position(txt, text_pos);
       if (text_pos == lasttext)
         {
         fb.pos = first_encounter;
@@ -1115,7 +1127,7 @@ file_buffer find_text(file_buffer fb, text txt)
     pos = get_next_position(fb, pos);
     }
   fb.pos = lastpos;
-  fb.start_selection = std::nullopt;  
+  fb.start_selection = std::nullopt;
   return fb;
   }
 
@@ -1127,4 +1139,149 @@ file_buffer find_text(file_buffer fb, const std::wstring& wtxt)
 file_buffer find_text(file_buffer fb, const std::string& txt)
   {
   return find_text(fb, jtk::convert_string_to_wstring(txt));
+  }
+
+namespace
+  {
+
+  bool _is_next_word(line::const_iterator it, line::const_iterator it_end, const std::string& word)
+    {
+    if (word.empty())
+      return false;
+    if (*it == (wchar_t)word[0])
+      {
+      ++it;
+      int i = 1;
+      while (i < word.length() && (it != it_end) && (*it == (wchar_t)word[i]))
+        {
+        ++it; ++i;
+        }
+      return (i == word.length());
+      }
+    return false;
+    }
+
+  uint8_t _get_end_of_line_lexer_status(file_buffer fb, int64_t row, uint8_t status_at_begin_of_line)
+    {
+    uint8_t current_status = status_at_begin_of_line;
+    line ln = fb.content[row];
+    auto it = ln.begin();
+    auto it_end = ln.end();
+    bool inside_single_line_comment = false;
+    bool inside_single_line_string = false;
+
+    for (; it != it_end; ++it)
+      {
+      if (inside_single_line_comment)
+        break;
+      if (current_status == lexer_normal)
+        {
+        if (!inside_single_line_string && _is_next_word(it, it_end, fb.multiline_begin))
+          {
+          current_status = lexer_inside_multiline_comment;
+          it += fb.multiline_begin.length();
+          }
+        else if (!inside_single_line_string && _is_next_word(it, it_end, fb.multistring_begin))
+          {
+          current_status = lexer_inside_multiline_string;
+          it += fb.multistring_begin.length();
+          }
+        else if (!inside_single_line_string && _is_next_word(it, it_end, fb.single_line))
+          {
+          inside_single_line_comment = true;
+          }
+        else if (*it == L'"')
+          {
+          inside_single_line_string = !inside_single_line_string;
+          }
+        }
+      else if (current_status == lexer_inside_multiline_comment)
+        {
+        if (_is_next_word(it, it_end, fb.multiline_end))
+          {
+          current_status = lexer_normal;
+          it += fb.multiline_end.length();
+          }
+        }
+      else if (current_status == lexer_inside_multiline_string)
+        {
+        if (_is_next_word(it, it_end, fb.multistring_end))
+          {
+          current_status = lexer_normal;
+          it += fb.multistring_end.length();
+          }
+        }
+      }  
+    return current_status;
+    }
+
+  }
+
+uint8_t get_end_of_line_lexer_status(file_buffer fb, int64_t row)
+  {
+  return _get_end_of_line_lexer_status(fb, row, fb.lex[row]);
+  }
+
+file_buffer init_lexer_status(file_buffer fb)
+  {
+  if (fb.content.empty())
+    return fb;
+  lexer_status ls;
+  auto trans = ls.transient();
+
+  trans.push_back(lexer_normal);
+  for (int64_t row = 1; row < fb.content.size(); ++row)
+    {
+    trans.push_back(_get_end_of_line_lexer_status(fb, row - 1, trans.back()));
+    }
+
+  fb.lex = trans.persistent();
+  return fb;
+  }
+
+file_buffer update_lexer_status(file_buffer fb, int64_t row)
+  {
+  assert(!fb.content.empty());
+  auto trans = fb.lex.transient();
+  while (trans.size() != fb.content.size())
+    trans.push_back(lexer_normal);
+
+  for (int64_t r = row; r < fb.content.size()-1; ++r)
+    {
+    uint8_t eol = _get_end_of_line_lexer_status(fb, r, trans[r]);
+    if (eol == trans[r + 1])
+      break;
+    trans.set(r + 1, eol);
+    }
+
+  fb.lex = trans.persistent();
+  return fb;
+  }
+
+file_buffer update_lexer_status(file_buffer fb, int64_t from_row, int64_t to_row)
+  {
+  assert(!fb.content.empty());
+  auto trans = fb.lex.transient();
+  while (trans.size() != fb.content.size())
+    trans.push_back(lexer_normal);
+
+  if (to_row == fb.content.size() - 1)
+    --to_row;
+
+  int64_t r = from_row;
+  for (; r <= to_row; ++r)
+    {
+    uint8_t eol = _get_end_of_line_lexer_status(fb, r, trans[r]);
+    trans.set(r + 1, eol);
+    }
+  for (; r < fb.content.size() - 1; ++r)
+    {
+    uint8_t eol = _get_end_of_line_lexer_status(fb, r, trans[r]);
+    if (eol == trans[r + 1])
+      break;
+    trans.set(r + 1, eol);
+    }
+
+  fb.lex = trans.persistent();
+  return fb;
   }

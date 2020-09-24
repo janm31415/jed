@@ -8,6 +8,11 @@
 
 typedef immutable::vector<wchar_t, false, 5> line;
 typedef immutable::vector<immutable::vector<wchar_t, false, 5>, false, 5> text;
+typedef immutable::vector<uint8_t, false, 5> lexer_status;
+
+#define lexer_normal 0
+#define lexer_inside_multiline_comment 1
+#define lexer_inside_multiline_string 2
 
 struct position
   {
@@ -50,6 +55,7 @@ struct position
 struct snapshot
   {
   text content;
+  lexer_status lex;
   position pos;
   std::optional<position> start_selection;
   uint8_t modification_mask;
@@ -59,11 +65,13 @@ struct snapshot
 struct file_buffer
   {
   text content;
+  lexer_status lex;
+  immutable::vector<snapshot, false> history;
   std::string name;
+  std::string multiline_begin, multiline_end, single_line, multistring_begin, multistring_end;
   position pos;
   int64_t xpos;
-  std::optional<position> start_selection;
-  immutable::vector<snapshot, false> history;
+  std::optional<position> start_selection;  
   uint64_t undo_redo_index;
   uint8_t modification_mask;
   bool rectangular_selection;
@@ -166,3 +174,11 @@ file_buffer find_text(file_buffer fb, const std::string& txt);
 position get_next_position(text txt, position pos);
 
 position get_next_position(file_buffer fb, position pos);
+
+uint8_t get_end_of_line_lexer_status(file_buffer fb, int64_t row);
+
+file_buffer init_lexer_status(file_buffer fb);
+
+file_buffer update_lexer_status(file_buffer fb, int64_t row);
+
+file_buffer update_lexer_status(file_buffer fb, int64_t from_row, int64_t to_row);

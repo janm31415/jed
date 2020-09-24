@@ -35,6 +35,7 @@ pdcex.h
 pref_file.h
 process.h
 settings.h
+syntax_highlight.h
 utils.h
     )
 	
@@ -50,6 +51,7 @@ mouse.cpp
 pdcex.cpp
 pref_file.cpp
 settings.cpp
+syntax_highlight.cpp
 utils.cpp
 )
 
