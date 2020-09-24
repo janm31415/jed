@@ -13,8 +13,8 @@ namespace
     comment_data cd;
     cd.multiline_begin = "/*";
     cd.multiline_end = "*/";
-    cd.multistring_begin = "R""(";
-    cd.multistring_end = """)";
+    cd.multistring_begin = "R\"(";
+    cd.multistring_end = ")\"";
     cd.single_line = "//";
     return cd;
     }

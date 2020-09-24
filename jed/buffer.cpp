@@ -505,8 +505,7 @@ file_buffer insert(file_buffer fb, std::wstring wtxt, const env_settings& s, boo
   int nr_of_lines_inserted = 0;
   int64_t first_insertion_row = pos.row;
   while (!wtxt.empty())
-    {
-    ++nr_of_lines_inserted;
+    {    
     auto endline_position = wtxt.find_first_of(L'\n');
     if (endline_position != std::wstring::npos)
       ++endline_position;
@@ -522,13 +521,17 @@ file_buffer insert(file_buffer fb, std::wstring wtxt, const env_settings& s, boo
     if (pos.row == fb.content.size())
       {
       fb.content = fb.content.push_back(input);
+      fb.lex = fb.lex.push_back(lexer_normal);
       fb.pos.col = fb.content.back().size();
+      ++nr_of_lines_inserted;
       if (input.back() == L'\n')
         {
         fb.content = fb.content.push_back(line());
+        fb.lex = fb.lex.push_back(lexer_normal);
         ++fb.pos.row;
         fb.pos.col = 0;
         pos = fb.pos;
+        ++nr_of_lines_inserted;
         }
       }
     else if (input.back() == L'\n')
@@ -537,9 +540,11 @@ file_buffer insert(file_buffer fb, std::wstring wtxt, const env_settings& s, boo
       auto second_part = fb.content[pos.row].drop(pos.col);
       fb.content = fb.content.set(pos.row, first_part.insert(pos.col, input));
       fb.content = fb.content.insert(pos.row + 1, second_part);
+      fb.lex = fb.lex.insert(pos.row + 1, lexer_normal);
       ++fb.pos.row;
       fb.pos.col = 0;
       pos = fb.pos;
+      ++nr_of_lines_inserted;
       }
     else
       {
@@ -547,7 +552,7 @@ file_buffer insert(file_buffer fb, std::wstring wtxt, const env_settings& s, boo
       fb.pos.col += input.size();
       }
     }
-  fb = update_lexer_status(fb, first_insertion_row, first_insertion_row + nr_of_lines_inserted - 1);
+  fb = update_lexer_status(fb, first_insertion_row, first_insertion_row + nr_of_lines_inserted);
   fb.xpos = get_x_position(fb, s);
   return fb;
   }
@@ -638,6 +643,7 @@ file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo)
       fb.pos.col = (int64_t)fb.content[pos.row - 1].size() - 1;
       auto l = fb.content[pos.row - 1].pop_back() + fb.content[pos.row];
       fb.content = fb.content.erase(pos.row).set(pos.row - 1, l);
+      fb.lex = fb.lex.erase(pos.row);
       --fb.pos.row;
       fb = update_lexer_status(fb, pos.row-1, pos.row);
       }
@@ -670,7 +676,9 @@ file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo)
           remove_line = true;
         fb.content = fb.content.set(p2.row, fb.content[p2.row].erase(0, tgt));
         fb.content = fb.content.erase(p1.row + 1, remove_line ? p2.row + 1 : p2.row);
+        fb.lex = fb.lex.erase(p1.row + 1, remove_line ? p2.row + 1 : p2.row);
         fb.content = fb.content.set(p1.row, fb.content[p1.row].erase(p1.col, fb.content[p1.row].size() - 1));
+        //fb = update_lexer_status(fb, p1.row, p2.row);  << don't think it's necessary, but maybe...
         fb.pos.col = p1.col;
         fb.pos.row = p1.row;
         fb = erase_right(fb, s, false);
@@ -741,6 +749,7 @@ file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo)
       {
       auto l = fb.content[pos.row].pop_back() + fb.content[pos.row + 1];
       fb.content = fb.content.erase(pos.row + 1).set(pos.row, l);
+      fb.lex = fb.lex.erase(pos.row + 1);
       fb = update_lexer_status(fb, pos.row, pos.row+1);
       }
     else if (pos.col == fb.content[pos.row].size() - 1)// last line, last item
@@ -1179,12 +1188,12 @@ namespace
         if (!inside_single_line_string && _is_next_word(it, it_end, fb.multiline_begin))
           {
           current_status = lexer_inside_multiline_comment;
-          it += fb.multiline_begin.length();
+          it += fb.multiline_begin.length()-1;
           }
         else if (!inside_single_line_string && _is_next_word(it, it_end, fb.multistring_begin))
           {
           current_status = lexer_inside_multiline_string;
-          it += fb.multistring_begin.length();
+          it += fb.multistring_begin.length()-1;
           }
         else if (!inside_single_line_string && _is_next_word(it, it_end, fb.single_line))
           {
@@ -1200,7 +1209,7 @@ namespace
         if (_is_next_word(it, it_end, fb.multiline_end))
           {
           current_status = lexer_normal;
-          it += fb.multiline_end.length();
+          it += fb.multiline_end.length()-1;
           }
         }
       else if (current_status == lexer_inside_multiline_string)
@@ -1208,7 +1217,7 @@ namespace
         if (_is_next_word(it, it_end, fb.multistring_end))
           {
           current_status = lexer_normal;
-          it += fb.multistring_end.length();
+          it += fb.multistring_end.length()-1;
           }
         }
       }  
@@ -1243,8 +1252,14 @@ file_buffer update_lexer_status(file_buffer fb, int64_t row)
   {
   assert(!fb.content.empty());
   auto trans = fb.lex.transient();
-  while (trans.size() != fb.content.size())
+  /*
+  
+  while (trans.size() < fb.content.size())
     trans.push_back(lexer_normal);
+  while (trans.size() > fb.content.size())
+    trans.pop_back();
+    */
+  assert(trans.size() == fb.content.size());
 
   for (int64_t r = row; r < fb.content.size()-1; ++r)
     {
@@ -1262,10 +1277,14 @@ file_buffer update_lexer_status(file_buffer fb, int64_t from_row, int64_t to_row
   {
   assert(!fb.content.empty());
   auto trans = fb.lex.transient();
-  while (trans.size() != fb.content.size())
+  /*  while (trans.size() < fb.content.size())
     trans.push_back(lexer_normal);
+  while (trans.size() > fb.content.size())
+    trans.pop_back();
+    */
+  assert(trans.size() == fb.content.size());
 
-  if (to_row == fb.content.size() - 1)
+  while (to_row >= fb.content.size() - 1)
     --to_row;
 
   int64_t r = from_row;
@@ -1308,15 +1327,15 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
         {
         out.emplace_back((int64_t)col, tt_comment);
         current_status = lexer_inside_multiline_comment;
-        it += fb.multiline_begin.length();
-        col += fb.multiline_begin.length();
+        it += fb.multiline_begin.length()-1;
+        col += fb.multiline_begin.length()-1;
         }
       else if (!inside_single_line_string && _is_next_word(it, it_end, fb.multistring_begin))
         {
         out.emplace_back((int64_t)col, tt_string);
         current_status = lexer_inside_multiline_string;
-        it += fb.multistring_begin.length();
-        col += fb.multistring_begin.length();
+        it += fb.multistring_begin.length()-1;
+        col += fb.multistring_begin.length()-1;
         }
       else if (!inside_single_line_string && _is_next_word(it, it_end, fb.single_line))
         {
@@ -1337,9 +1356,9 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
       if (_is_next_word(it, it_end, fb.multiline_end))
         {
         current_status = lexer_normal;
-        it += fb.multiline_end.length();
-        col += fb.multiline_end.length();
-        out.emplace_back((int64_t)col, tt_normal);
+        it += fb.multiline_end.length()-1;
+        col += fb.multiline_end.length()-1;
+        out.emplace_back((int64_t)col+1, tt_normal);
         }
       }
     else if (current_status == lexer_inside_multiline_string)
@@ -1347,9 +1366,9 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
       if (_is_next_word(it, it_end, fb.multistring_end))
         {
         current_status = lexer_normal;
-        it += fb.multistring_end.length();
-        col += fb.multistring_end.length();
-        out.emplace_back((int64_t)col, tt_normal);
+        it += fb.multistring_end.length()-1;
+        col += fb.multistring_end.length()-1;
+        out.emplace_back((int64_t)col+1, tt_normal);
         }
       }
     }  
