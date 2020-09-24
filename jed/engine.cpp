@@ -2240,6 +2240,8 @@ std::optional<app_state> load_folder(app_state state, const std::string& folder,
   if (jtk::is_directory(state.buffer.name))
     {
     state.buffer = read_from_file(simplified_folder_name);
+    state.buffer = set_multiline_comments(state.buffer);
+    state.buffer = init_lexer_status(state.buffer);
     return check_scroll_position(state, s);
     }
   else

@@ -1175,6 +1175,7 @@ namespace
     uint8_t current_status = status_at_begin_of_line;
     line ln = fb.content[row];
     auto it = ln.begin();
+    auto prev_it = it;
     auto it_end = ln.end();
     bool inside_single_line_comment = false;
     bool inside_single_line_string = false;
@@ -1199,7 +1200,7 @@ namespace
           {
           inside_single_line_comment = true;
           }
-        else if (*it == L'"')
+        else if (*it == L'"' && *prev_it != L'\\' && !(!inside_single_line_string && *prev_it == L'\''))
           {
           inside_single_line_string = !inside_single_line_string;
           }
@@ -1220,6 +1221,7 @@ namespace
           it += fb.multistring_end.length()-1;
           }
         }
+      prev_it = it;
       }  
     return current_status;
     }
@@ -1321,6 +1323,7 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
   uint8_t current_status = fb.lex[row];
   line ln = fb.content[row];
   auto it = ln.begin();
+  auto prev_it = it;
   auto it_end = ln.end();
   bool inside_single_line_comment = false;
   bool inside_single_line_string = false;
@@ -1350,7 +1353,7 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
         inside_single_line_comment = true;
         out.emplace_back((int64_t)col, tt_comment);
         }
-      else if (*it == L'"')
+      else if (*it == L'"' && *prev_it != L'\\' && !(!inside_single_line_string && *prev_it == L'\''))
         {                
         inside_single_line_string = !inside_single_line_string;
         if (inside_single_line_string)
@@ -1379,6 +1382,7 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
         out.emplace_back((int64_t)col+1, tt_normal);
         }
       }
+    prev_it = it;
     }  
 
   std::reverse(out.begin(), out.end());
