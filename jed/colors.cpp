@@ -44,7 +44,10 @@ namespace
     jed_command_bg_bold = 28,
     jed_command_tag_bold = 29,
     jed_title_text_bold = 30,
-    jed_title_bg_bold = 31
+    jed_title_bg_bold = 31,
+
+    jed_comment = 32,
+    jed_string = 33
     };
 
   void darktheme()
@@ -242,20 +245,12 @@ void init_colors(const settings& s)
 
   init_pair(title_bar, jed_title_text, jed_title_bg);
 
-  /*
-  darktheme();
-  //darktheme_softer();
-  //acmetheme();
-  //matrixtheme();
+  rgb local_comment_color(133, 195, 100);
+  rgb local_string_color(219, 100, 100);
 
-  init_pair(default_color, jed_editor_text, jed_editor_bg);
-  init_pair(command_color, jed_command_text, jed_command_bg);
-  init_pair(multiline_tag_editor, jed_editor_tag, jed_editor_bg);
-  init_pair(multiline_tag_command, jed_command_tag, jed_command_bg);
+  init_color(jed_comment, local_comment_color);
+  init_color(jed_string, local_string_color);
 
-  init_pair(scroll_bar_b_editor, jed_command_bg, jed_editor_bg);
-  init_pair(scroll_bar_f_editor, jed_editor_tag, jed_editor_bg);
-
-  init_pair(title_bar, jed_title_text, jed_title_bg);
-  */
+  init_pair(comment_color, jed_comment, jed_editor_bg);
+  init_pair(string_color, jed_string, jed_editor_bg);
   }

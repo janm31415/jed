@@ -1285,3 +1285,81 @@ file_buffer update_lexer_status(file_buffer fb, int64_t from_row, int64_t to_row
   fb.lex = trans.persistent();
   return fb;
   }
+
+std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t row)
+  {
+  std::vector<std::pair<int64_t, text_type>> out;
+  out.emplace_back((int64_t)0, (text_type)fb.lex[row]);
+
+  uint8_t current_status = fb.lex[row];
+  line ln = fb.content[row];
+  auto it = ln.begin();
+  auto it_end = ln.end();
+  bool inside_single_line_comment = false;
+  bool inside_single_line_string = false;
+  int64_t col = 0;
+  for (; it != it_end; ++it, ++col)
+    {
+    if (inside_single_line_comment)
+      break;
+    if (current_status == lexer_normal)
+      {
+      if (!inside_single_line_string && _is_next_word(it, it_end, fb.multiline_begin))
+        {
+        out.emplace_back((int64_t)col, tt_comment);
+        current_status = lexer_inside_multiline_comment;
+        it += fb.multiline_begin.length();
+        col += fb.multiline_begin.length();
+        }
+      else if (!inside_single_line_string && _is_next_word(it, it_end, fb.multistring_begin))
+        {
+        out.emplace_back((int64_t)col, tt_string);
+        current_status = lexer_inside_multiline_string;
+        it += fb.multistring_begin.length();
+        col += fb.multistring_begin.length();
+        }
+      else if (!inside_single_line_string && _is_next_word(it, it_end, fb.single_line))
+        {
+        inside_single_line_comment = true;
+        out.emplace_back((int64_t)col, tt_comment);
+        }
+      else if (*it == L'"')
+        {                
+        inside_single_line_string = !inside_single_line_string;
+        if (inside_single_line_string)
+          out.emplace_back((int64_t)col, tt_string);
+        else
+          out.emplace_back((int64_t)col+1, tt_normal);
+        }
+      }
+    else if (current_status == lexer_inside_multiline_comment)
+      {
+      if (_is_next_word(it, it_end, fb.multiline_end))
+        {
+        current_status = lexer_normal;
+        it += fb.multiline_end.length();
+        col += fb.multiline_end.length();
+        out.emplace_back((int64_t)col, tt_normal);
+        }
+      }
+    else if (current_status == lexer_inside_multiline_string)
+      {
+      if (_is_next_word(it, it_end, fb.multistring_end))
+        {
+        current_status = lexer_normal;
+        it += fb.multistring_end.length();
+        col += fb.multistring_end.length();
+        out.emplace_back((int64_t)col, tt_normal);
+        }
+      }
+    }  
+
+  std::reverse(out.begin(), out.end());
+  out.erase(std::unique(out.begin(), out.end(), [](const std::pair<int64_t, text_type>& left, const std::pair<int64_t, text_type>& right)
+    {
+    return left.first == right.first;
+    })
+  , out.end());
+
+  return out;
+  }

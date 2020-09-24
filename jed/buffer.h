@@ -1,6 +1,7 @@
 #pragma once
 
 #include <immutable/vector.h>
+#include <vector>
 #include <string>
 #include <optional>
 #include <stdint.h>
@@ -182,3 +183,16 @@ file_buffer init_lexer_status(file_buffer fb);
 file_buffer update_lexer_status(file_buffer fb, int64_t row);
 
 file_buffer update_lexer_status(file_buffer fb, int64_t from_row, int64_t to_row);
+
+enum text_type
+  {
+  tt_normal,
+  tt_comment,
+  tt_string
+  };
+
+/*
+first index in pair equals the column where the text type (second index in pair) starts.
+The text type is valid till the next index or the end of the line.
+*/
+std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t row);

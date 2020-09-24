@@ -10,7 +10,9 @@ enum e_color
   multiline_tag_command,
   scroll_bar_b_editor,
   scroll_bar_f_editor,
-  title_bar
+  title_bar,
+  comment_color,
+  string_color
   };
 
 void init_colors(const settings& s);

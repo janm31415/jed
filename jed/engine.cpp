@@ -232,6 +232,8 @@ This makes it possible to further fill the line with spaces after calling "draw_
 */
 int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s, const env_settings& senv)
   {
+  auto tt = get_text_type(fb, current.row);
+
   line ln = fb.content[current.row];
   int multiline_tag = (int)multiline_tag_editor;
   if (set_type == SET_TEXT_COMMAND)
@@ -327,10 +329,26 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
     }
 
   int drawn = 0;
+  auto current_tt = tt.back();
+  assert(current_tt.first == 0);
+  tt.pop_back();
+
   for (; it != it_end; ++it)
     {
     if (drawn >= maxcol)
       break;
+
+    while (!tt.empty() && tt.back().first <= current.col)
+      {
+      current_tt = tt.back();
+      tt.pop_back();
+      }
+    switch (current_tt.second)
+      {
+      case tt_normal: attron(base_color); break;
+      case tt_string: attron(COLOR_PAIR(string_color)); break;
+      case tt_comment: attron(COLOR_PAIR(comment_color)); break;
+      }
 
     if (active && in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular, senv))
       attron(A_REVERSE);
@@ -2919,7 +2937,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
         bool double_click = event.button.clicks > 1;
         if (event.button.button == 1)
           {
-          if (mouse.right_button_down)
+          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
             mouse.left_button_down = false;
             mouse.right_button_down = false;
@@ -2933,15 +2951,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           return middle_mouse_button_down(state, x, y, double_click, s);
         else if (event.button.button == 3)
           {
-          if (mouse.left_button_down)
-            {
-            mouse.left_button_down = false;
-            mouse.right_button_down = false;
-            mouse.left_dragging = false;
-            return middle_mouse_button_down(state, x, y, false, s);
-            }
-          else
-            return right_mouse_button_down(state, x, y, double_click, s);
+          return right_mouse_button_down(state, x, y, double_click, s);
           }
         break;
         }
