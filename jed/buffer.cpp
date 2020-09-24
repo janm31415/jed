@@ -1251,6 +1251,9 @@ file_buffer init_lexer_status(file_buffer fb)
 file_buffer update_lexer_status(file_buffer fb, int64_t row)
   {
   assert(!fb.content.empty());
+  if (fb.single_line.empty() && fb.multiline_begin.empty() && fb.multistring_begin.empty())
+    return fb;
+
   auto trans = fb.lex.transient();
   /*
   
@@ -1276,6 +1279,9 @@ file_buffer update_lexer_status(file_buffer fb, int64_t row)
 file_buffer update_lexer_status(file_buffer fb, int64_t from_row, int64_t to_row)
   {
   assert(!fb.content.empty());
+  if (fb.single_line.empty() && fb.multiline_begin.empty() && fb.multistring_begin.empty())
+    return fb;
+
   auto trans = fb.lex.transient();
   /*  while (trans.size() < fb.content.size())
     trans.push_back(lexer_normal);
@@ -1309,6 +1315,8 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
   {
   std::vector<std::pair<int64_t, text_type>> out;
   out.emplace_back((int64_t)0, (text_type)fb.lex[row]);
+  if (fb.single_line.empty() && fb.multiline_begin.empty() && fb.multistring_begin.empty())
+    return out;
 
   uint8_t current_status = fb.lex[row];
   line ln = fb.content[row];
