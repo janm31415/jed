@@ -758,19 +758,25 @@ file_buffer erase_right(file_buffer fb, const env_settings& s, bool save_undo)
     auto pos = get_actual_position(fb);
     fb.pos = pos;
     fb.start_selection = std::nullopt;
-    if (pos.col < fb.content[pos.row].size() - 1)
+    if (pos.col < (int64_t)fb.content[pos.row].size() - 1)
       {
       fb.content = fb.content.set(pos.row, fb.content[pos.row].erase(pos.col));
       fb = update_lexer_status(fb, pos.row);
       }
-    else if (pos.row < fb.content.size() - 1)
+    else if (fb.content[pos.row].empty())
+      {
+      fb.content = fb.content.erase(pos.row);
+      fb.lex = fb.lex.erase(pos.row);
+      fb = update_lexer_status(fb, pos.row);
+      }
+    else if (pos.row < (int64_t)fb.content.size() - 1)
       {
       auto l = fb.content[pos.row].pop_back() + fb.content[pos.row + 1];
       fb.content = fb.content.erase(pos.row + 1).set(pos.row, l);
       fb.lex = fb.lex.erase(pos.row + 1);
       fb = update_lexer_status(fb, pos.row, pos.row+1);
       }
-    else if (pos.col == fb.content[pos.row].size() - 1)// last line, last item
+    else if (pos.col == (int64_t)fb.content[pos.row].size() - 1)// last line, last item
       {
       fb.content = fb.content.set(pos.row, fb.content[pos.row].pop_back());
       }
