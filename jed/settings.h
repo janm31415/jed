@@ -30,6 +30,11 @@ struct settings
 
   uint32_t color_titlebar_text;
   uint32_t color_titlebar_background;
+
+  uint32_t color_comment;
+  uint32_t color_string;
+  uint32_t color_keyword;
+  uint32_t color_keyword_2;
   };
 
 void update_settings(settings& s, const char* filename);

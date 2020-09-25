@@ -70,6 +70,21 @@ file_buffer set_multiline_comments(file_buffer fb)
   return fb;
   }
 
+const keyword_data& get_keywords(const std::string& name)
+  {
+  auto ext = jtk::get_extension(name);
+  auto filename = jtk::get_filename(name);
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+  std::transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+  const syntax_highlighter& shl = get_syntax_highlighter();
+  if (shl.extension_or_filename_has_keywords(ext))
+    return shl.get_keywords(ext);
+  if (shl.extension_or_filename_has_keywords(filename))
+    return shl.get_keywords(filename);
+  static keyword_data empty;
+  return empty;
+  }
+
 app_state clear_operation_buffer(app_state state);
 
 app_state resize_font(app_state state, int font_size, settings& s)
@@ -231,7 +246,7 @@ Returns an x offset (let's call it multiline_offset_x) such that
 equals the x position in the screen of where the next character should come.
 This makes it possible to further fill the line with spaces after calling "draw_line".
 */
-int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, position underline, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s, const env_settings& senv)
+int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, position underline, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const keyword_data& kd, const settings& s, const env_settings& senv)
   {
   auto tt = get_text_type(fb, current.row);
 
@@ -334,8 +349,14 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
   assert(current_tt.first == 0);
   tt.pop_back();
 
+  int next_word_read_length_remaining = 0;
+  bool keyword_type_1 = false;
+  bool keyword_type_2 = false;
+
   for (; it != it_end; ++it)
-    {
+    {    
+    if (next_word_read_length_remaining>0)
+      --next_word_read_length_remaining;
     if (drawn >= maxcol)
       break;
 
@@ -344,12 +365,39 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
       current_tt = tt.back();
       tt.pop_back();
       }
+
+    if (!(kd.keywords_1.empty() && kd.keywords_2.empty()) && current_tt.second == tt_normal && next_word_read_length_remaining == 0)
+      {
+      keyword_type_1 = false;
+      keyword_type_2 = false;
+      std::wstring next_word = read_next_word(it, it_end);
+      next_word_read_length_remaining = next_word.length();
+      auto it = std::lower_bound(kd.keywords_1.begin(), kd.keywords_1.end(), next_word);
+      if (it != kd.keywords_1.end() && *it == next_word)
+        keyword_type_1 = true;
+      else
+        {
+        it = std::lower_bound(kd.keywords_2.begin(), kd.keywords_2.end(), next_word);
+        if (it != kd.keywords_2.end() && *it == next_word)
+          keyword_type_2 = true;
+        }
+      }
+
     switch (current_tt.second)
       {
-      case tt_normal: attron(base_color); break;
+      case tt_normal: 
+      {
+      if (keyword_type_1)
+        attron(COLOR_PAIR(keyword_color));
+      else if (keyword_type_2)
+        attron(COLOR_PAIR(keyword_2_color));
+      else
+        attron(base_color); 
+      break;
+      }
       case tt_string: attron(COLOR_PAIR(string_color)); break;
       case tt_comment: attron(COLOR_PAIR(comment_color)); break;
-      }    
+      }
 
     if (active && in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular, senv))
       attron(A_REVERSE);
@@ -539,8 +587,10 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       continue;
       }
 
+    keyword_data kd;
+
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s, senv);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, kd, s, senv);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if (!has_nontrivial_selection && (current == cursor))
@@ -593,6 +643,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
     underline = find_corresponding_token(fb, cursor, current.row, current.row + maxrow - 1);
     }
 
+  const keyword_data& kd = get_keywords(fb.name);
 
   attrset(DEFAULT_COLOR);
 
@@ -614,7 +665,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, s, senv);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, kd, s, senv);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if (!has_nontrivial_selection && (current == cursor))
@@ -744,8 +795,9 @@ app_state draw(app_state state, const settings& s)
     int cols_available = maxcol - txt.length();
     int wide_characters_offset = 0;
     int multiline_offset_x = txt.length();
+    keyword_data kd;
     if (!state.operation_buffer.content.empty())
-      multiline_offset_x = draw_line(wide_characters_offset, state.operation_buffer, current, cursor, state.operation_buffer.pos, position(-1, -1), DEFAULT_COLOR | A_BOLD, rows - 3, multiline_offset_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_TEXT_OPERATION, s, senv);
+      multiline_offset_x = draw_line(wide_characters_offset, state.operation_buffer, current, cursor, state.operation_buffer.pos, position(-1, -1), DEFAULT_COLOR | A_BOLD, rows - 3, multiline_offset_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_TEXT_OPERATION, kd, s, senv);
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
       {
@@ -1395,11 +1447,11 @@ app_state save_file(app_state state)
     wfilename = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
   std::replace(wfilename.begin(), wfilename.end(), '\\', '/'); // replace all '\\' by '/'
   std::string filename = clean_filename(jtk::convert_wstring_to_string(wfilename));
-  if (filename.find(' ') != std::string::npos)
-    {
-    filename.push_back('"');
-    filename.insert(filename.begin(), '"');
-    }
+  //if (filename.find(' ') != std::string::npos)
+  //  {
+  //  filename.push_back('"');
+  //  filename.insert(filename.begin(), '"');
+  //  }
   bool success = false;
   state.buffer = save_to_file(success, state.buffer, filename);
   if (success)
@@ -1439,6 +1491,8 @@ app_state make_new_buffer(app_state state)
 app_state get(app_state state)
   {
   state.buffer = read_from_file(state.buffer.name);
+  state.buffer = set_multiline_comments(state.buffer);
+  state.buffer = init_lexer_status(state.buffer);
   state.operation = op_editing;
   return state;
   }
@@ -1932,6 +1986,12 @@ std::optional<app_state> command_acme_theme(app_state state, settings& s)
 
   s.color_titlebar_text = 0xff000000;
   s.color_titlebar_background = 0xffffffff;
+
+  s.color_comment = 0xff036206;
+  s.color_string = 0xff1104ae;
+  s.color_keyword = 0xffff0000;
+  s.color_keyword_2 = 0xffff8080;
+
   init_colors(s);
   stdscr->_clear = TRUE;
   return state;
@@ -1952,6 +2012,12 @@ std::optional<app_state> command_dark_theme(app_state state, settings& s)
 
   s.color_titlebar_text = 0xff000000;
   s.color_titlebar_background = 0xffffffff;
+
+  s.color_comment = 0xff64c385;
+  s.color_string = 0xff6464db;
+  s.color_keyword = 0xffff8080;
+  s.color_keyword_2 = 0xffffc0c0;
+
   init_colors(s);
   stdscr->_clear = TRUE;
   return state;
@@ -1973,6 +2039,12 @@ std::optional<app_state> command_matrix_theme(app_state state, settings& s)
 
   s.color_titlebar_text = 0xff00ff00;
   s.color_titlebar_background = 0xff006400;
+
+  s.color_comment = 0xff64c385;
+  s.color_string = 0xff6464db;
+  s.color_keyword = 0xffff0000;
+  s.color_keyword_2 = 0xffff8080;
+
   init_colors(s);
   stdscr->_clear = TRUE;
   return state;
@@ -2110,13 +2182,16 @@ void split_command(std::wstring& first, std::wstring& remainder, const std::wstr
   remainder = command.substr(pos_quote_2 + 1);
   }
 
-void remove_quotes(std::wstring& cmd)
+bool remove_quotes(std::wstring& cmd)
   {
+  bool has_quotes = false;
   while (cmd.size() >= 2 && cmd.front() == L'"' && cmd.back() == L'"')
     {
     cmd.erase(cmd.begin());
     cmd.pop_back();
+    has_quotes = true;
     }
+  return has_quotes;
   }
 
 char** alloc_arguments(const std::string& path, const std::vector<std::string>& parameters)
@@ -2157,12 +2232,17 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
     cmd_remainder = clean_command(cmd_remainder);
     std::wstring first, rest;
     split_command(first, rest, cmd_remainder);
-    remove_quotes(first);
+    bool has_quotes = remove_quotes(first);
     auto par_path = get_file_path(jtk::convert_wstring_to_string(first), state.buffer.name);
     if (par_path.empty())
       parameters.push_back(jtk::convert_wstring_to_string(first));
     else
       parameters.push_back(par_path);
+    if (has_quotes)
+      {
+      parameters.back().insert(parameters.back().begin(), '"');
+      parameters.back().push_back('"');
+      }
     cmd_remainder = clean_command(rest);
     }
 
@@ -2299,6 +2379,14 @@ std::optional<app_state> load(app_state state, const std::wstring& command, sett
   std::string cmd = jtk::convert_wstring_to_string(command);
   if (!cmd.empty() && cmd.front() == '/')
     cmd.erase(cmd.begin());
+  if (!cmd.empty() && cmd.front() == '"')
+    cmd.erase(cmd.begin());
+  if (!cmd.empty() && cmd.back() == '"')
+    cmd.pop_back();
+  if (!cmd.empty() && cmd.front() == '<')
+    cmd.erase(cmd.begin());
+  if (!cmd.empty() && cmd.back() == '>')
+    cmd.pop_back();
   std::string newfilename = folder + cmd;
 
   if (jtk::file_exists(newfilename))

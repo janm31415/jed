@@ -12,7 +12,9 @@ enum e_color
   scroll_bar_f_editor,
   title_bar,
   comment_color,
-  string_color
+  string_color,
+  keyword_color,
+  keyword_2_color
   };
 
 void init_colors(const settings& s);

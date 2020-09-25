@@ -47,166 +47,10 @@ namespace
     jed_title_bg_bold = 31,
 
     jed_comment = 32,
-    jed_string = 33
+    jed_string = 33,
+    jed_keyword = 34,
+    jed_keyword_2 = 35
     };
-
-  void darktheme()
-    {
-    rgb text_color(192, 192, 192);
-    rgb bg_color(0, 0, 0);
-    rgb multiline_tag_color(85, 130, 241);
-
-    rgb text_color_bold(255, 255, 255);
-    rgb bg_color_bold(0, 0, 0);
-    rgb multiline_tag_color_bold(115, 155, 255);
-
-    rgb text_title(0, 0, 0);
-    rgb bg_title(255, 255, 255);
-
-    init_color(jed_title_text, text_title);
-    init_color(jed_title_bg, bg_title);
-    init_color(jed_title_text_bold, text_title);
-    init_color(jed_title_bg_bold, bg_title);
-
-    init_color(jed_editor_text, text_color);
-    init_color(jed_editor_bg, bg_color);
-    init_color(jed_editor_tag, multiline_tag_color);
-
-    init_color(jed_command_text, bg_color);
-    init_color(jed_command_bg, text_color);
-    init_color(jed_command_tag, multiline_tag_color);
-
-    //A_BOLD is equivalent to OR operation with value 8
-    init_color(jed_editor_text_bold, text_color_bold);
-    init_color(jed_editor_bg_bold, bg_color_bold);
-    init_color(jed_editor_tag_bold, multiline_tag_color_bold);
-
-    init_color(jed_command_text_bold, bg_color);
-    init_color(jed_command_bg_bold, text_color);
-    init_color(jed_command_tag_bold, multiline_tag_color_bold);
-    }
-
-  void darktheme_softer()
-    {
-    rgb text_color(200, 200, 200);
-    rgb bg_color(40, 40, 40);
-    rgb multiline_tag_color(85, 130, 241);
-
-    rgb text_color_bold(255, 255, 255);
-    rgb bg_color_bold(0, 0, 0);
-    rgb multiline_tag_color_bold(115, 155, 255);
-
-    rgb text_title(0, 0, 0);
-    rgb bg_title(255, 255, 255);
-
-    init_color(jed_title_text, text_title);
-    init_color(jed_title_bg, bg_title);
-    init_color(jed_title_text_bold, text_title);
-    init_color(jed_title_bg_bold, bg_title);
-
-    init_color(jed_editor_text, text_color);
-    init_color(jed_editor_bg, bg_color);
-    init_color(jed_editor_tag, multiline_tag_color);
-
-    init_color(jed_command_text, bg_color);
-    init_color(jed_command_bg, text_color);
-    init_color(jed_command_tag, multiline_tag_color);
-
-    //A_BOLD is equivalent to OR operation with value 8
-    init_color(jed_editor_text_bold, text_color_bold);
-    init_color(jed_editor_bg_bold, bg_color_bold);
-    init_color(jed_editor_tag_bold, multiline_tag_color_bold);
-
-    init_color(jed_command_text_bold, bg_color);
-    init_color(jed_command_bg_bold, text_color);
-    init_color(jed_command_tag_bold, multiline_tag_color_bold);
-    }
-
-
-  void acmetheme()
-    {
-    rgb text_color(0, 0, 0);
-    rgb bg_color(255, 255, 240);
-    rgb multiline_tag_color(85, 130, 241);
-
-    rgb text_color_bold(0, 0, 0);
-    rgb bg_color_bold(235, 233, 162);
-    rgb multiline_tag_color_bold(115, 155, 255);
-
-    rgb command_text_color(0, 0, 0);
-    rgb command_bg_color(231, 251, 252);
-
-    rgb command_text_color_bold(0, 0, 0);
-    rgb command_bg_color_bold(158, 235, 239);
-
-    rgb text_title(0, 0, 0);
-    rgb bg_title(255, 255, 255);
-
-    init_color(jed_title_text, text_title);
-    init_color(jed_title_bg, bg_title);
-    init_color(jed_title_text_bold, text_title);
-    init_color(jed_title_bg_bold, bg_title);
-
-    init_color(jed_editor_text, text_color);
-    init_color(jed_editor_bg, bg_color);
-    init_color(jed_editor_tag, multiline_tag_color);
-
-    init_color(jed_command_text, command_text_color);
-    init_color(jed_command_bg, command_bg_color);
-    init_color(jed_command_tag, multiline_tag_color);
-
-    //A_BOLD is equivalent to OR operation with value 8
-    init_color(jed_editor_text_bold, text_color_bold);
-    init_color(jed_editor_bg_bold, bg_color_bold);
-    init_color(jed_editor_tag_bold, multiline_tag_color_bold);
-
-    init_color(jed_command_text_bold, command_text_color_bold);
-    init_color(jed_command_bg_bold, command_bg_color_bold);
-    init_color(jed_command_tag_bold, multiline_tag_color_bold);
-    }
-
-
-  void matrixtheme()
-    {
-    rgb text_color(0, 200, 0);
-    rgb bg_color(0, 0, 0);
-    rgb multiline_tag_color(0, 255, 0);
-
-    rgb text_color_bold(0, 255, 0);
-    rgb bg_color_bold(0, 0, 0);
-    rgb multiline_tag_color_bold(130, 255, 130);
-
-    rgb text_title(0,255, 0);
-    rgb bg_title(0, 100, 0);
-
-    rgb command_text_color(0, 255, 0);
-    rgb command_bg_color(0, 80, 0);
-
-    rgb command_text_color_bold(0, 255, 0);
-    rgb command_bg_color_bold(158, 235, 239);
-
-    init_color(jed_title_text, text_title);
-    init_color(jed_title_bg, bg_title);
-    init_color(jed_title_text_bold, text_title);
-    init_color(jed_title_bg_bold, bg_title);
-
-    init_color(jed_editor_text, text_color);
-    init_color(jed_editor_bg, bg_color);
-    init_color(jed_editor_tag, multiline_tag_color);
-
-    init_color(jed_command_text, command_text_color);
-    init_color(jed_command_bg, command_bg_color);
-    init_color(jed_command_tag, multiline_tag_color);
-
-    //A_BOLD is equivalent to OR operation with value 8
-    init_color(jed_editor_text_bold, text_color_bold);
-    init_color(jed_editor_bg_bold, bg_color_bold);
-    init_color(jed_editor_tag_bold, multiline_tag_color_bold);
-
-    init_color(jed_command_text_bold, command_text_color_bold);
-    init_color(jed_command_bg_bold, command_bg_color_bold);
-    init_color(jed_command_tag_bold, multiline_tag_color_bold);
-    }
 
   }
 
@@ -248,9 +92,13 @@ void init_colors(const settings& s)
   rgb local_comment_color(133, 195, 100);
   rgb local_string_color(219, 100, 100);
 
-  init_color(jed_comment, local_comment_color);
-  init_color(jed_string, local_string_color);
+  init_color(jed_comment, rgb(s.color_comment));
+  init_color(jed_string, rgb(s.color_string));
+  init_color(jed_keyword, rgb(s.color_keyword));
+  init_color(jed_keyword_2, rgb(s.color_keyword_2));
 
   init_pair(comment_color, jed_comment, jed_editor_bg);
   init_pair(string_color, jed_string, jed_editor_bg);
+  init_pair(keyword_color, jed_keyword, jed_editor_bg);
+  init_pair(keyword_2_color, jed_keyword_2, jed_editor_bg);
   }

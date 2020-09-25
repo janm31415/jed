@@ -217,3 +217,5 @@ When selecting ( you want to find the corresponding ).
 This method looks for corresponding tokens, inside the range (minrow, maxrow).
 */
 position find_corresponding_token(file_buffer fb, position tokenpos, int64_t minrow, int64_t maxrow);
+
+std::wstring read_next_word(line::const_iterator it, line::const_iterator it_end);

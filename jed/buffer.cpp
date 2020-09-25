@@ -1172,6 +1172,17 @@ file_buffer find_text(file_buffer fb, const std::string& txt)
   return find_text(fb, jtk::convert_string_to_wstring(txt));
   }
 
+std::wstring read_next_word(line::const_iterator it, line::const_iterator it_end)
+  {
+  std::wstring out;
+  while (it != it_end && *it != L' ' && *it != L'(' && *it != L'{' && *it != L')' && *it != L'}' && *it != L'[' && *it != L']'&& *it != L'\n' && *it != L'\t' && *it != L'\r')
+    {
+    out.push_back(*it);
+    ++it;
+    }
+  return out;
+  }
+
 namespace
   {
 

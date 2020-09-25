@@ -32,6 +32,11 @@ settings::settings()
 
   color_titlebar_text = 0xff000000;
   color_titlebar_background = 0xffffffff;
+
+  color_comment = 0xff64c385;
+  color_string = 0xff6464db;
+  color_keyword = 0xffff0000;
+  color_keyword_2 = 0xffff8080;
   }
 
 void update_settings(settings& s, const char* filename)
@@ -63,6 +68,10 @@ void update_settings(settings& s, const char* filename)
   f["color_command_tag"] >> s.color_command_tag;
   f["color_titlebar_text"] >> s.color_titlebar_text;
   f["color_titlebar_background"] >> s.color_titlebar_background;
+  f["color_comment"] >> s.color_comment;
+  f["color_string"] >> s.color_string;
+  f["color_keyword"] >> s.color_keyword;
+  f["color_keyword_2"] >> s.color_keyword_2;
 
   f.release();
   }
@@ -103,6 +112,9 @@ void write_settings(const settings& s, const char* filename)
   f << "color_command_tag" << s.color_command_tag;
   f << "color_titlebar_text" << s.color_titlebar_text;
   f << "color_titlebar_background" << s.color_titlebar_background;
-
+  f << "color_comment" << s.color_comment;
+  f << "color_string" << s.color_string;
+  f << "color_keyword" << s.color_keyword;
+  f << "color_keyword_2" << s.color_keyword_2;
   f.release();
   }
