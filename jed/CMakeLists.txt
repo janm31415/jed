@@ -78,7 +78,7 @@ add_definitions(-DPDC_FORCE_UTF8)
 add_definitions(-DPDC_WIDE)
 
 if (WIN32)
-add_executable(jed WIN32 ${HDRS} ${SRCS} ${JSON})
+add_executable(jed WIN32 ${HDRS} ${SRCS} ${JSON} jed.rc resource.h)
 endif (WIN32)
 
 if (UNIX)
