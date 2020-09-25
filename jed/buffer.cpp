@@ -18,11 +18,27 @@ file_buffer make_empty_buffer()
   return fb;
   }
 
-file_buffer read_from_file(const std::string& filename)
+namespace
+  {
+  bool remove_quotes(std::string& cmd)
+    {
+    bool has_quotes = false;
+    while (cmd.size() >= 2 && cmd.front() == '"' && cmd.back() == '"')
+      {
+      cmd.erase(cmd.begin());
+      cmd.pop_back();
+      has_quotes = true;
+      }
+    return has_quotes;
+    }
+  }
+
+file_buffer read_from_file(std::string filename)
   {
   using namespace jtk;
+  remove_quotes(filename);
   file_buffer fb = make_empty_buffer();
-  fb.name = filename;
+  fb.name = filename;  
   if (file_exists(filename))
     {
 #ifdef _WIN32
