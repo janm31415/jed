@@ -61,11 +61,12 @@ file_buffer set_multiline_comments(file_buffer fb)
     cd = shl.get_syntax_highlighter(ext);
   else if (shl.extension_or_filename_has_syntax_highlighter(filename))
     cd = shl.get_syntax_highlighter(filename);
-  fb.multiline_begin = cd.multiline_begin;
-  fb.multiline_end = cd.multiline_end;
-  fb.multistring_begin = cd.multistring_begin;
-  fb.multistring_end = cd.multistring_end;
-  fb.single_line = cd.single_line;
+  fb.syntax.multiline_begin = cd.multiline_begin;
+  fb.syntax.multiline_end = cd.multiline_end;
+  fb.syntax.multistring_begin = cd.multistring_begin;
+  fb.syntax.multistring_end = cd.multistring_end;
+  fb.syntax.single_line = cd.single_line;
+  fb.syntax.uses_quotes_for_chars = cd.uses_quotes_for_chars;
   return fb;
   }
 
@@ -230,7 +231,7 @@ Returns an x offset (let's call it multiline_offset_x) such that
 equals the x position in the screen of where the next character should come.
 This makes it possible to further fill the line with spaces after calling "draw_line".
 */
-int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s, const env_settings& senv)
+int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, position underline, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const settings& s, const env_settings& senv)
   {
   auto tt = get_text_type(fb, current.row);
 
@@ -348,7 +349,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
       case tt_normal: attron(base_color); break;
       case tt_string: attron(COLOR_PAIR(string_color)); break;
       case tt_comment: attron(COLOR_PAIR(comment_color)); break;
-      }
+      }    
 
     if (active && in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular, senv))
       attron(A_REVERSE);
@@ -357,8 +358,14 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
 
     if (!has_selection && (current == cursor))
       {
-      attron(A_REVERSE);
+      attron(A_REVERSE);      
       }
+
+    attroff(A_UNDERLINE | A_ITALIC);
+    if ((current == cursor) && valid_position(fb, underline))
+      attron(A_UNDERLINE | A_ITALIC);
+    if (current == underline)
+      attron(A_UNDERLINE | A_ITALIC);
 
     move((int)r, (int)current.col + xoffset + wide_characters_offset);
     auto character = *it;
@@ -492,6 +499,12 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
 
   bool has_nontrivial_selection = (fb.start_selection != std::nullopt) && (fb.start_selection != fb.pos);
 
+  position underline(-1, -1);
+  if (active && !has_nontrivial_selection)
+    {
+    underline = find_corresponding_token(fb, cursor, current.row, current.row + maxrow - 1);
+    }
+
   attrset(COMMAND_COLOR);
 
   for (int r = 0; r < maxrow; ++r)
@@ -527,7 +540,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s, senv);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, s, senv);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if (!has_nontrivial_selection && (current == cursor))
@@ -574,6 +587,12 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
 
   bool has_nontrivial_selection = (fb.start_selection != std::nullopt) && (fb.start_selection != fb.pos);
 
+  position underline(-1, -1);
+  if (active && !has_nontrivial_selection)
+    {
+    underline = find_corresponding_token(fb, cursor, current.row, current.row + maxrow - 1);
+    }
+
 
   attrset(DEFAULT_COLOR);
 
@@ -595,7 +614,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, s, senv);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, s, senv);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if (!has_nontrivial_selection && (current == cursor))
@@ -726,7 +745,7 @@ app_state draw(app_state state, const settings& s)
     int wide_characters_offset = 0;
     int multiline_offset_x = txt.length();
     if (!state.operation_buffer.content.empty())
-      multiline_offset_x = draw_line(wide_characters_offset, state.operation_buffer, current, cursor, state.operation_buffer.pos, DEFAULT_COLOR | A_BOLD, rows - 3, multiline_offset_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_TEXT_OPERATION, s, senv);
+      multiline_offset_x = draw_line(wide_characters_offset, state.operation_buffer, current, cursor, state.operation_buffer.pos, position(-1, -1), DEFAULT_COLOR | A_BOLD, rows - 3, multiline_offset_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_TEXT_OPERATION, s, senv);
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
       {
@@ -1394,13 +1413,13 @@ app_state save_file(app_state state)
     std::string error_message = "Error saving file " + filename;
     state.message = string_to_line(error_message);
     }
-  std::string multiline_begin = state.buffer.multiline_begin;
-  std::string multiline_end = state.buffer.multiline_end;
-  std::string single_line = state.buffer.single_line;
+  std::string multiline_begin = state.buffer.syntax.multiline_begin;
+  std::string multiline_end = state.buffer.syntax.multiline_end;
+  std::string single_line = state.buffer.syntax.single_line;
   state.buffer = set_multiline_comments(state.buffer);
-  if (multiline_begin != state.buffer.multiline_begin ||
-    multiline_end != state.buffer.multiline_end ||
-    single_line != state.buffer.single_line
+  if (multiline_begin != state.buffer.syntax.multiline_begin ||
+    multiline_end != state.buffer.syntax.multiline_end ||
+    single_line != state.buffer.syntax.single_line
     )
     {
     state.buffer = init_lexer_status(state.buffer);
@@ -1572,6 +1591,7 @@ std::optional<app_state> ret(app_state state, settings& s)
 app_state clear_operation_buffer(app_state state)
   {
   state.operation_buffer.content = text();
+  state.operation_buffer.lex = lexer_status();
   state.operation_buffer.history = immutable::vector<snapshot, false>();
   state.operation_buffer.undo_redo_index = 0;
   state.operation_buffer.start_selection = std::nullopt;

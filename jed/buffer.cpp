@@ -488,6 +488,8 @@ int64_t get_x_position(file_buffer fb, const env_settings& s)
 
 file_buffer insert(file_buffer fb, std::wstring wtxt, const env_settings& s, bool save_undo)
   {
+  if (wtxt.empty())
+    return fb;
   if (save_undo)
     fb = push_undo(fb);
 
@@ -1092,6 +1094,26 @@ position get_next_position(file_buffer fb, position pos)
   return get_next_position(fb.content, pos);
   }
 
+
+position get_previous_position(text txt, position pos)
+  {
+  if (pos.row < 0)
+    return pos;
+  --pos.col;
+  while (pos.col < 0 && pos.row >= 0)
+    {
+    --pos.row;
+    if (pos.row >= 0)
+      pos.col = (int64_t)txt[pos.row].size() - 1;
+    }
+  return pos;
+  }
+
+position get_previous_position(file_buffer fb, position pos)
+  {
+  return get_previous_position(fb.content, pos);
+  }
+
 file_buffer find_text(file_buffer fb, text txt)
   {
   if (txt.empty())
@@ -1176,51 +1198,57 @@ namespace
     line ln = fb.content[row];
     auto it = ln.begin();
     auto prev_it = it;
+    auto prevprev_it = prev_it;
     auto it_end = ln.end();
     bool inside_single_line_comment = false;
     bool inside_single_line_string = false;
-
+    bool inside_quotes = false;
     for (; it != it_end; ++it)
       {
       if (inside_single_line_comment)
         break;
       if (current_status == lexer_normal)
         {
-        if (!inside_single_line_string && _is_next_word(it, it_end, fb.multiline_begin))
+        if (!inside_single_line_string && !inside_quotes && _is_next_word(it, it_end, fb.syntax.multiline_begin))
           {
           current_status = lexer_inside_multiline_comment;
-          it += fb.multiline_begin.length()-1;
+          it += fb.syntax.multiline_begin.length()-1;
           }
-        else if (!inside_single_line_string && _is_next_word(it, it_end, fb.multistring_begin))
+        else if (!inside_single_line_string && !inside_quotes && _is_next_word(it, it_end, fb.syntax.multistring_begin))
           {
           current_status = lexer_inside_multiline_string;
-          it += fb.multistring_begin.length()-1;
+          it += fb.syntax.multistring_begin.length()-1;
           }
-        else if (!inside_single_line_string && _is_next_word(it, it_end, fb.single_line))
+        else if (!inside_single_line_string && !inside_quotes && _is_next_word(it, it_end, fb.syntax.single_line))
           {
           inside_single_line_comment = true;
           }
-        else if (*it == L'"' && *prev_it != L'\\' && !(!inside_single_line_string && *prev_it == L'\''))
+        else if (!inside_quotes && *it == L'"' && (*prev_it != L'\\' || *prevprev_it == L'\\'))
           {
           inside_single_line_string = !inside_single_line_string;
+          }
+        else if (fb.syntax.uses_quotes_for_chars && !inside_single_line_string && *it == L'\'' && (*prev_it != L'\\' || *prevprev_it == L'\\'))
+          {
+          inside_quotes = !inside_quotes;
           }
         }
       else if (current_status == lexer_inside_multiline_comment)
         {
-        if (_is_next_word(it, it_end, fb.multiline_end))
+        if (_is_next_word(it, it_end, fb.syntax.multiline_end))
           {
           current_status = lexer_normal;
-          it += fb.multiline_end.length()-1;
+          it += fb.syntax.multiline_end.length()-1;
           }
         }
       else if (current_status == lexer_inside_multiline_string)
         {
-        if (_is_next_word(it, it_end, fb.multistring_end))
+        if (_is_next_word(it, it_end, fb.syntax.multistring_end))
           {
           current_status = lexer_normal;
-          it += fb.multistring_end.length()-1;
+          it += fb.syntax.multistring_end.length()-1;
           }
         }
+      prevprev_it = prev_it;
       prev_it = it;
       }  
     return current_status;
@@ -1253,7 +1281,7 @@ file_buffer init_lexer_status(file_buffer fb)
 file_buffer update_lexer_status(file_buffer fb, int64_t row)
   {
   assert(!fb.content.empty());
-  if (fb.single_line.empty() && fb.multiline_begin.empty() && fb.multistring_begin.empty())
+  if (fb.syntax.single_line.empty() && fb.syntax.multiline_begin.empty() && fb.syntax.multistring_begin.empty())
     return fb;
 
   auto trans = fb.lex.transient();
@@ -1281,7 +1309,7 @@ file_buffer update_lexer_status(file_buffer fb, int64_t row)
 file_buffer update_lexer_status(file_buffer fb, int64_t from_row, int64_t to_row)
   {
   assert(!fb.content.empty());
-  if (fb.single_line.empty() && fb.multiline_begin.empty() && fb.multistring_begin.empty())
+  if (fb.syntax.single_line.empty() && fb.syntax.multiline_begin.empty() && fb.syntax.multistring_begin.empty())
     return fb;
 
   auto trans = fb.lex.transient();
@@ -1317,16 +1345,18 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
   {
   std::vector<std::pair<int64_t, text_type>> out;
   out.emplace_back((int64_t)0, (text_type)fb.lex[row]);
-  if (fb.single_line.empty() && fb.multiline_begin.empty() && fb.multistring_begin.empty())
+  if (fb.syntax.single_line.empty() && fb.syntax.multiline_begin.empty() && fb.syntax.multistring_begin.empty())
     return out;
 
   uint8_t current_status = fb.lex[row];
   line ln = fb.content[row];
   auto it = ln.begin();
   auto prev_it = it;
+  auto prevprev_it = prev_it;
   auto it_end = ln.end();
   bool inside_single_line_comment = false;
   bool inside_single_line_string = false;
+  bool inside_quotes = false;
   int64_t col = 0;
   for (; it != it_end; ++it, ++col)
     {
@@ -1334,26 +1364,26 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
       break;
     if (current_status == lexer_normal)
       {
-      if (!inside_single_line_string && _is_next_word(it, it_end, fb.multiline_begin))
+      if (!inside_single_line_string && !inside_quotes && _is_next_word(it, it_end, fb.syntax.multiline_begin))
         {
         out.emplace_back((int64_t)col, tt_comment);
         current_status = lexer_inside_multiline_comment;
-        it += fb.multiline_begin.length()-1;
-        col += fb.multiline_begin.length()-1;
+        it += fb.syntax.multiline_begin.length()-1;
+        col += fb.syntax.multiline_begin.length()-1;
         }
-      else if (!inside_single_line_string && _is_next_word(it, it_end, fb.multistring_begin))
+      else if (!inside_single_line_string && !inside_quotes && _is_next_word(it, it_end, fb.syntax.multistring_begin))
         {
         out.emplace_back((int64_t)col, tt_string);
         current_status = lexer_inside_multiline_string;
-        it += fb.multistring_begin.length()-1;
-        col += fb.multistring_begin.length()-1;
+        it += fb.syntax.multistring_begin.length()-1;
+        col += fb.syntax.multistring_begin.length()-1;
         }
-      else if (!inside_single_line_string && _is_next_word(it, it_end, fb.single_line))
+      else if (!inside_single_line_string && !inside_quotes && _is_next_word(it, it_end, fb.syntax.single_line))
         {
         inside_single_line_comment = true;
         out.emplace_back((int64_t)col, tt_comment);
         }
-      else if (*it == L'"' && *prev_it != L'\\' && !(!inside_single_line_string && *prev_it == L'\''))
+      else if (!inside_quotes && *it == L'"' && (*prev_it != L'\\' || *prevprev_it == L'\\'))
         {                
         inside_single_line_string = !inside_single_line_string;
         if (inside_single_line_string)
@@ -1361,27 +1391,36 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
         else
           out.emplace_back((int64_t)col+1, tt_normal);
         }
+      else if (fb.syntax.uses_quotes_for_chars && !inside_single_line_string && *it == L'\'' && (*prev_it != L'\\' || *prevprev_it == L'\\'))
+        {
+        inside_quotes = !inside_quotes;
+        if (inside_quotes)
+          out.emplace_back((int64_t)col, tt_string);
+        else
+          out.emplace_back((int64_t)col + 1, tt_normal);
+        }
       }
     else if (current_status == lexer_inside_multiline_comment)
       {
-      if (_is_next_word(it, it_end, fb.multiline_end))
+      if (_is_next_word(it, it_end, fb.syntax.multiline_end))
         {
         current_status = lexer_normal;
-        it += fb.multiline_end.length()-1;
-        col += fb.multiline_end.length()-1;
+        it += fb.syntax.multiline_end.length()-1;
+        col += fb.syntax.multiline_end.length()-1;
         out.emplace_back((int64_t)col+1, tt_normal);
         }
       }
     else if (current_status == lexer_inside_multiline_string)
       {
-      if (_is_next_word(it, it_end, fb.multistring_end))
+      if (_is_next_word(it, it_end, fb.syntax.multistring_end))
         {
         current_status = lexer_normal;
-        it += fb.multistring_end.length()-1;
-        col += fb.multistring_end.length()-1;
+        it += fb.syntax.multistring_end.length()-1;
+        col += fb.syntax.multistring_end.length()-1;
         out.emplace_back((int64_t)col+1, tt_normal);
         }
       }
+    prevprev_it = prev_it;
     prev_it = it;
     }  
 
@@ -1393,4 +1432,84 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
   , out.end());
 
   return out;
+  }
+
+bool valid_position(text txt, position pos)
+  {
+  if (pos.row < 0 || pos.col < 0)
+    return false;
+  if (pos.row >= txt.size())
+    return false;
+  if (pos.col >= txt[pos.row].size())
+    return false;
+  return true;
+  }
+
+bool valid_position(file_buffer fb, position pos)
+  {
+  return valid_position(fb.content, pos);
+  }
+
+position find_corresponding_token(file_buffer fb, position tokenpos, int64_t minrow, int64_t maxrow)
+  {  
+  if (!valid_position(fb, tokenpos))
+    return position(-1, -1);
+  wchar_t token = fb.content[tokenpos.row][tokenpos.col];
+  wchar_t corresponding_token = 0;
+  bool forward = true;
+  switch (token)
+    {
+    case L'(':  corresponding_token = L')'; break;
+    case L')':  corresponding_token = L'('; forward = false;  break;
+    case L'{':  corresponding_token = L'}'; break;
+    case L'}':  corresponding_token = L'{'; forward = false;  break;
+    case L'[':  corresponding_token = L']'; break;
+    case L']':  corresponding_token = L'['; forward = false;  break;
+    }
+  if (corresponding_token == 0)
+    return position(-1, -1);
+  int count = 0;
+  if (forward)
+    {
+    auto last_pos = get_last_position(fb);      
+    if (tokenpos == last_pos)
+      return position(-1, -1);
+    position current = get_next_position(fb, tokenpos);
+    while (current.row <= maxrow && valid_position(fb, current))
+      {
+      wchar_t current_token = fb.content[current.row][current.col];
+      if (current_token == token)
+        ++count;
+      if (current_token == corresponding_token)
+        {
+        if (count == 0)
+          return current;
+        else
+          --count;
+        }
+      current = get_next_position(fb, current);
+      }
+    }
+  else
+    {
+    auto first_pos = position(0, 0);
+    if (tokenpos == first_pos)
+      return position(-1, -1);
+    position current = get_previous_position(fb, tokenpos);
+    while (current.row >= minrow && valid_position(fb, current))
+      {
+      wchar_t current_token = fb.content[current.row][current.col];
+      if (current_token == token)
+        ++count;
+      if (current_token == corresponding_token)
+        {
+        if (count == 0)
+          return current;
+        else
+          --count;
+        }
+      current = get_previous_position(fb, current);
+      }
+    }
+  return position(-1, -1);
   }

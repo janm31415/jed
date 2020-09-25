@@ -63,13 +63,20 @@ struct snapshot
   bool rectangular_selection;
   };
 
+struct syntax_settings
+  {
+  syntax_settings() : uses_quotes_for_chars(false) {}
+  std::string multiline_begin, multiline_end, single_line, multistring_begin, multistring_end;
+  bool uses_quotes_for_chars;
+  };
+
 struct file_buffer
   {
   text content;
   lexer_status lex;
   immutable::vector<snapshot, false> history;
-  std::string name;
-  std::string multiline_begin, multiline_end, single_line, multistring_begin, multistring_end;
+  syntax_settings syntax;
+  std::string name;  
   position pos;
   int64_t xpos;
   std::optional<position> start_selection;  
@@ -176,6 +183,14 @@ position get_next_position(text txt, position pos);
 
 position get_next_position(file_buffer fb, position pos);
 
+position get_previous_position(text txt, position pos);
+
+position get_previous_position(file_buffer fb, position pos);
+
+bool valid_position(text txt, position pos);
+
+bool valid_position(file_buffer fb, position pos);
+
 uint8_t get_end_of_line_lexer_status(file_buffer fb, int64_t row);
 
 file_buffer init_lexer_status(file_buffer fb);
@@ -196,3 +211,9 @@ first index in pair equals the column where the text type (second index in pair)
 The text type is valid till the next index or the end of the line.
 */
 std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t row);
+
+/*
+When selecting ( you want to find the corresponding ).
+This method looks for corresponding tokens, inside the range (minrow, maxrow).
+*/
+position find_corresponding_token(file_buffer fb, position tokenpos, int64_t minrow, int64_t maxrow);

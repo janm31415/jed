@@ -5,9 +5,11 @@
 
 struct comment_data
   {
+  comment_data() : uses_quotes_for_chars(false) {}
   std::string multiline_begin, multiline_end;
   std::string multistring_begin, multistring_end;
   std::string single_line;
+  bool uses_quotes_for_chars;
   };
 
 

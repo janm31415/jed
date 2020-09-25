@@ -16,6 +16,7 @@ namespace
     cd.multistring_begin = "R\"(";
     cd.multistring_end = ")\"";
     cd.single_line = "//";
+    cd.uses_quotes_for_chars = true;
     return cd;
     }
 
@@ -39,6 +40,7 @@ namespace
     {
     comment_data cd;
     cd.single_line = "#";
+    cd.uses_quotes_for_chars = true;
     return cd;
     }
 
