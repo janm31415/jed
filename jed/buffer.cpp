@@ -678,10 +678,27 @@ file_buffer erase(file_buffer fb, const env_settings& s, bool save_undo)
       {
       fb.start_selection = std::nullopt;
       fb.rectangular_selection = false;
-      fb.content = fb.content.set(p1.row, fb.content[p1.row].erase(p1.col, p2.col));
+      auto new_line = fb.content[p1.row].erase(p1.col, p2.col);
+      fb.content = fb.content.set(p1.row, new_line);
       fb.pos.col = p1.col;
       fb.pos.row = p1.row;
-      fb = erase_right(fb, s, false);
+      if (new_line.empty() && p1.row == (int64_t)fb.content.size() - 1)
+        {
+        //fb.content = fb.content.pop_back();
+        //fb.lex = fb.lex.pop_back();
+        //if (fb.content.empty())
+        //  {
+        //  fb.pos.col = 0;
+        //  fb.pos.row = 0;
+        //  }
+        //else
+        //  {
+        //  --fb.pos.row;
+        //  fb.pos.col = fb.content[fb.pos.row].empty() ? 0 : (int64_t)fb.content[fb.pos.row].size() - 1;
+        //  }
+        }
+      else
+        fb = erase_right(fb, s, false);
       }
     else
       {
