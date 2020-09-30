@@ -1369,12 +1369,16 @@ app_state del(app_state state, const settings& s)
 
 app_state ret_editor(app_state state, const settings& s)
   {
-  return text_input(state, "\n", s);
+  std::string indentation("\n");    
+  indentation.append(get_row_indentation_pattern(state.buffer, state.buffer.pos.row));  
+  return text_input(state, indentation.c_str(), s);
   }
 
 app_state ret_command(app_state state, const settings& s)
   {
-  return text_input(state, "\n", s);
+  std::string indentation("\n");
+  indentation.append(get_row_indentation_pattern(state.command_buffer, state.command_buffer.pos.row));  
+  return text_input(state, indentation.c_str(), s);
   }
 
 line string_to_line(const std::string& txt)

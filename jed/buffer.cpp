@@ -983,8 +983,9 @@ file_buffer move_page_down(file_buffer fb, int64_t rows, const env_settings& s)
 
 file_buffer move_home(file_buffer fb, const env_settings& s)
   {
-  fb.pos.col = 0;
-  fb.xpos = 0;
+  auto indented_pos = get_indentation_at_row(fb, fb.pos.row); 
+  fb.pos.col = (fb.pos.col <= indented_pos.col) ? 0 : indented_pos.col;
+  fb.xpos = fb.pos.col == 0 ? 0 : get_x_position(fb, s);
   return fb;
   }
 
@@ -1549,4 +1550,28 @@ position find_corresponding_token(file_buffer fb, position tokenpos, int64_t min
       }
     }
   return position(-1, -1);
+  }
+
+position get_indentation_at_row(file_buffer fb, int64_t row)
+  {
+  position out(row, 0);
+  auto ln = fb.content[row];
+  auto maxcol = ln.size();
+  while (out.col < maxcol && (ln[out.col] == L' ' || ln[out.col] == L'\t'))
+    ++out.col;
+  return out;
+  }
+
+std::string get_row_indentation_pattern(file_buffer fb, int64_t row)
+  {
+  std::string out;
+  auto ln = fb.content[row];
+  auto maxcol = ln.size();
+  int64_t col = 0;
+  while (col < maxcol && (ln[col] == L' ' || ln[col] == L'\t'))
+    {
+    out.push_back((char)ln[col]);
+    ++col;
+    }    
+  return out;
   }
