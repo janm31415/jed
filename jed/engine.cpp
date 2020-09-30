@@ -489,8 +489,8 @@ void draw_help_text(app_state state)
   getmaxyx(stdscr, rows, cols);
   if (state.operation == op_editing || state.operation == op_command_editing)
     {
-    static std::string line1("^N New    ^O Open   ^S Save   ^C Copy   ^V Paste  ^Z Undo   ^Y Redo   ^A Sel/all");
-    static std::string line2("F1 Help   ^X Exit   ^F Find   ^G Goto   ^H Replace");
+    static std::string line1("^N New    ^O Open   ^S Put    ^W Save   ^C Copy   ^V Paste  ^Z Undo   ^Y Redo");
+    static std::string line2("F1 Help   ^X Exit   ^F Find   ^G Goto   ^H Replace^A Sel/all");
     draw_help_line(line1, rows - 2, cols);
     draw_help_line(line2, rows - 1, cols);
     }
@@ -1905,10 +1905,46 @@ std::wstring find_bottom_line_help_command(int x, int y)
   return clean_command(command);
   }
 
-std::optional<app_state> command_save(app_state state, settings& s)
+std::optional<app_state> command_save_as(app_state state, settings& s)
   {
   state.operation = op_save;
   return make_save_buffer(state, s);
+  }
+
+std::optional<app_state> command_put(app_state state, settings& s)
+  {
+  if (state.buffer.name.empty())
+    {
+    std::string error_message = "Error saving nameless file";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  if (state.buffer.name.back() == '/')
+    {
+    std::string error_message = "Error saving folder as file";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  bool success = false;
+  state.buffer = save_to_file(success, state.buffer, state.buffer.name);
+  if (success)
+    {
+    std::string message = "Saved file " + state.buffer.name;
+    state.message = string_to_line(message);
+    }
+  else
+    {
+    std::string error_message = "Error saving file " + state.buffer.name;
+    state.message = string_to_line(error_message);
+    }
+  return state;
+  }
+
+std::optional<app_state> command_save(app_state state, settings& s)
+  {
+  if (state.buffer.name.empty())
+    return command_save_as(state, s);
+  return command_put(state, s);
   }
 
 std::optional<app_state> command_open(app_state state, settings& s)
@@ -2061,35 +2097,6 @@ std::optional<app_state> command_get(app_state state, settings& s)
   return get(state);
   }
 
-std::optional<app_state> command_put(app_state state, settings& s)
-  {
-  if (state.buffer.name.empty())
-    {
-    std::string error_message = "Error saving nameless file";
-    state.message = string_to_line(error_message);
-    return state;
-    }
-  if (state.buffer.name.back() == '/')
-    {
-    std::string error_message = "Error saving folder as file";
-    state.message = string_to_line(error_message);
-    return state;
-    }
-  bool success = false;
-  state.buffer = save_to_file(success, state.buffer, state.buffer.name);
-  if (success)
-    {
-    std::string message = "Saved file " + state.buffer.name;
-    state.message = string_to_line(message);
-    }
-  else
-    {
-    std::string error_message = "Error saving file " + state.buffer.name;
-    state.message = string_to_line(error_message);
-    }
-  return state;
-  }
-
 std::optional<app_state> command_show_all_characters(app_state state, settings& s)
   {
   s.show_all_characters = !s.show_all_characters;
@@ -2141,7 +2148,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Put", command_put},
   {L"Redo", command_redo},
   {L"Replace", command_replace},
-  {L"Save", command_save},
+  {L"Save", command_save_as},
   {L"Sel/all", command_select_all},
   {L"TabSpaces", command_tab_spaces},
   {L"Tab2", command_tab_2},
@@ -2814,7 +2821,14 @@ std::optional<app_state> process_input(app_state state, settings& s)
           case SDLK_TAB: return s.use_spaces_for_tab ? spaced_tab(state, s.tab_space, s) : tab(state, s);
           case SDLK_RETURN: return ret(state, s);
           case SDLK_BACKSPACE: return backspace(state, s);
-          case SDLK_DELETE: return del(state, s);
+          case SDLK_DELETE: 
+          {
+          if (keyb.is_down(SDLK_LSHIFT) || keyb.is_down(SDLK_RSHIFT)) // copy
+            {
+            state = *command_copy_to_snarf_buffer(state, s); 
+            }
+          return del(state, s);
+          }
           case SDLK_F10:
           {
           if (state.operation == op_editing)
@@ -2974,6 +2988,14 @@ std::optional<app_state> process_input(app_state state, settings& s)
           if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
             {
             return command_paste_from_snarf_buffer(state, s);
+            }
+          break;
+          }
+          case SDLK_w:
+          {
+          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+            {
+            return command_save_as(state, s);
             }
           break;
           }

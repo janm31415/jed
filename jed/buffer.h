@@ -173,6 +173,8 @@ text to_text(std::wstring wtxt);
 
 std::string to_string(text txt);
 
+std::wstring to_wstring(text txt);
+
 file_buffer find_text(file_buffer fb, text txt);
 
 file_buffer find_text(file_buffer fb, const std::wstring& wtxt);
