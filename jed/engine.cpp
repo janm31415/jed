@@ -492,7 +492,7 @@ void draw_help_text(app_state state)
     static std::string line1("^N New    ^O Open   ^S Put    ^W Save   ^C Copy   ^V Paste  ^Z Undo   ^Y Redo");
     static std::string line2("F1 Help   ^X Exit   ^F Find   ^G Goto   ^H Replace^A Sel/all");
     draw_help_line(line1, rows - 2, cols);
-    draw_help_line(line2, rows - 1, cols);
+    draw_help_line(line2, rows - 1, cols-1); // cols - 1 because we need to avoid that the last character is drawn: pdcurses will do a \n, causing our layout to be messed up
     }
   if (state.operation == op_find)
     {
@@ -2304,6 +2304,7 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
 
 std::optional<app_state> load_file(app_state state, const std::string& filename, settings& s)
   {
+  write_settings(s, get_file_in_executable_path("jed_settings.json").c_str());
   std::string exepath = jtk::get_executable_path();
   exepath.insert(exepath.begin(), '"');
   exepath.push_back('"');
