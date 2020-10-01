@@ -2025,7 +2025,7 @@ std::optional<app_state> command_acme_theme(app_state state, settings& s)
   s.color_command_tag = 0xfff18255;
 
   s.color_titlebar_text = 0xff000000;
-  s.color_titlebar_background = 0xffffffff;
+  s.color_titlebar_background = 0xfffcfbe7;
 
   s.color_comment = 0xff036206;
   s.color_string = 0xff1104ae;
@@ -2046,12 +2046,12 @@ std::optional<app_state> command_dark_theme(app_state state, settings& s)
   s.color_editor_background_bold = 0xff000000;
   s.color_editor_tag_bold = 0xffff9b73;
 
-  s.color_command_text = 0xff000000;
-  s.color_command_background = 0xffc0c0c0;
+  s.color_command_text = 0xffc0c0c0;
+  s.color_command_background = 0x282828;
   s.color_command_tag = 0xfff18255;
 
-  s.color_titlebar_text = 0xff000000;
-  s.color_titlebar_background = 0xffffffff;
+  s.color_titlebar_text = 0xffc0c0c0;
+  s.color_titlebar_background = 0x282828;
 
   s.color_comment = 0xff64c385;
   s.color_string = 0xff6464db;
@@ -2066,24 +2066,24 @@ std::optional<app_state> command_dark_theme(app_state state, settings& s)
 
 std::optional<app_state> command_matrix_theme(app_state state, settings& s)
   {
-  s.color_editor_text = 0xff00c800;
+  s.color_editor_text = 0xff5bed08;
   s.color_editor_background = 0xff000000;
   s.color_editor_tag = 0xff00ff00;
-  s.color_editor_text_bold = 0xff00ff00;
+  s.color_editor_text_bold = 0xff8ded08;
   s.color_editor_background_bold = 0xff000000;
-  s.color_editor_tag_bold = 0xff82ff82;
+  s.color_editor_tag_bold = 0xff00ff00;
 
-  s.color_command_text = 0xff00ff00;
-  s.color_command_background = 0xff005000;
+  s.color_command_text = 0xff83ff83;
+  s.color_command_background = 0xff002000;
   s.color_command_tag = 0xff00ff00;
 
-  s.color_titlebar_text = 0xff00ff00;
-  s.color_titlebar_background = 0xff006400;
+  s.color_titlebar_text = 0xff83ff83;
+  s.color_titlebar_background = 0xff002000;
 
-  s.color_comment = 0xff64c385;
-  s.color_string = 0xff6464db;
-  s.color_keyword = 0xffff0000;
-  s.color_keyword_2 = 0xffff8080;
+  s.color_comment = 0xff006f00;
+  s.color_string = 0xff00de89;
+  s.color_keyword = 0xff63ac00;
+  s.color_keyword_2 = 0xff90ff46;
 
   init_colors(s);
   stdscr->_clear = TRUE;
