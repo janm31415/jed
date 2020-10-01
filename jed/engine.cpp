@@ -2381,6 +2381,8 @@ std::optional<app_state> find_text(app_state state, const std::wstring& command,
 
 std::optional<app_state> load(app_state state, const std::wstring& command, settings& s)
   {
+  if (command.empty())
+    return state;
   std::string folder = jtk::get_folder(state.buffer.name);
   if (folder.empty())
     folder = jtk::get_executable_path();
