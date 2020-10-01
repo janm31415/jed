@@ -2323,6 +2323,12 @@ std::vector<std::string> simplify_split_folder(const std::vector<std::string>& s
     out.erase(it - 1, it + 1);
     it = std::find(out.begin(), out.end(), std::string(".."));
     }
+  it = std::find(out.begin(), out.end(), std::string("."));
+  while (it != out.end() && it != out.begin())
+    {
+    out.erase(it);
+    it = std::find(out.begin(), out.end(), std::string("."));
+    }
   return out;
   }
 
