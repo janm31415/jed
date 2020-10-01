@@ -26,17 +26,17 @@ settings::settings()
   color_editor_background_bold = 0xff000000;
   color_editor_tag_bold = 0xffff9b73;
 
-  color_command_text = 0xff000000;
-  color_command_background = 0xffc0c0c0;
-  color_command_tag = 0xff5582f1;
+  color_command_text = 0xffc0c0c0;
+  color_command_background = 0x282828;
+  color_command_tag = 0xfff18255;
 
-  color_titlebar_text = 0xff000000;
-  color_titlebar_background = 0xffffffff;
+  color_titlebar_text = 0xffc0c0c0;
+  color_titlebar_background = 0x282828;
 
   color_comment = 0xff64c385;
   color_string = 0xff6464db;
-  color_keyword = 0xffff0000;
-  color_keyword_2 = 0xffff8080;
+  color_keyword = 0xffff8080;
+  color_keyword_2 = 0xffffc0c0;
   }
 
 void update_settings(settings& s, const char* filename)
