@@ -2795,7 +2795,13 @@ std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, se
 
   if (p.type == SET_NONE)
     {
-    std::wstring command = find_bottom_line_help_command(x, y);
+    std::wstring command;
+    if (y == 0) // clicking on title bar
+      {
+      command = jtk::convert_string_to_wstring(jtk::get_folder(state.buffer.name));
+      }
+    else
+      command = find_bottom_line_help_command(x, y);
     return load(state, command, s);
     }
   return state;
