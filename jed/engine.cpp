@@ -2063,7 +2063,6 @@ std::optional<app_state> command_dark_theme(app_state state, settings& s)
   return state;
   }
 
-
 std::optional<app_state> command_matrix_theme(app_state state, settings& s)
   {
   s.color_editor_text = 0xff5bed08;
@@ -2084,6 +2083,32 @@ std::optional<app_state> command_matrix_theme(app_state state, settings& s)
   s.color_string = 0xff00de89;
   s.color_keyword = 0xff63ac00;
   s.color_keyword_2 = 0xff90ff46;
+
+  init_colors(s);
+  stdscr->_clear = TRUE;
+  return state;
+  }
+
+std::optional<app_state> command_light_theme(app_state state, settings& s)
+  {
+  s.color_editor_text = 0xff000000;
+  s.color_editor_background = 0xffffffff;
+  s.color_editor_tag = 0xff808080;
+  s.color_editor_text_bold = 0xff000000;
+  s.color_editor_background_bold = 0xff000000;
+  s.color_editor_tag_bold = 0xff808080;
+
+  s.color_command_text = 0xff000000;
+  s.color_command_background = 0xffe9dbd6;
+  s.color_command_tag = 0xff808080;
+
+  s.color_titlebar_text = 0xff000000;
+  s.color_titlebar_background = 0xffe9dbd6;
+
+  s.color_comment = 0xff008000;
+  s.color_string = 0xff1515a3;
+  s.color_keyword = 0xffff0b4c;
+  s.color_keyword_2 = 0xffb7912b;
 
   init_colors(s);
   stdscr->_clear = TRUE;
@@ -2144,6 +2169,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Get", command_get},
   {L"Goto", command_goto},
   {L"Help", command_help},
+  {L"LightTheme", command_light_theme},
   {L"MatrixTheme", command_matrix_theme},
   {L"New", command_new},
   {L"No", command_no},
