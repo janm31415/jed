@@ -427,6 +427,8 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
     wide_characters_offset += cwidth - 1;
     ++current.col;
     }
+    
+  attroff(A_UNDERLINE | A_ITALIC);
 
   if (!in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular, senv))
     attroff(A_REVERSE);
@@ -3213,10 +3215,12 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
       state.buffer = read_from_file(inputfile);
       }
     }
-  else if (s.last_active_folder.empty())
-    state.buffer = make_empty_buffer();
+  //else if (s.last_active_folder.empty())
+  //  state.buffer = make_empty_buffer();
+  //else
+  //  state.buffer = read_from_file(s.last_active_folder);
   else
-    state.buffer = read_from_file(s.last_active_folder);
+    state.buffer = read_from_file(jtk::get_cwd());
   state.buffer = set_multiline_comments(state.buffer);
   state.buffer = init_lexer_status(state.buffer);
   state.command_buffer = insert(make_empty_buffer(), s.command_text, convert(s), false);
