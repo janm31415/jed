@@ -209,3 +209,27 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
     }
   return "";
   }
+
+bool remove_quotes(std::string& cmd)
+  {
+  bool has_quotes = false;
+  while (cmd.size() >= 2 && cmd.front() == '"' && cmd.back() == '"')
+    {
+    cmd.erase(cmd.begin());
+    cmd.pop_back();
+    has_quotes = true;
+    }
+  return has_quotes;
+  }
+  
+bool remove_quotes(std::wstring& cmd)
+  {
+  bool has_quotes = false;
+  while (cmd.size() >= 2 && cmd.front() == L'"' && cmd.back() == L'"')
+    {
+    cmd.erase(cmd.begin());
+    cmd.pop_back();
+    has_quotes = true;
+    }
+  return has_quotes;
+  }

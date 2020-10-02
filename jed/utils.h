@@ -13,3 +13,6 @@ This method will look for filename in the folder defined by the window_filename,
 Returns empty string if nothing was found, or returns the path of the file.
 */
 std::string get_file_path(const std::string& filename, const std::string& buffer_filename);
+
+bool remove_quotes(std::string& cmd);
+bool remove_quotes(std::wstring& cmd);

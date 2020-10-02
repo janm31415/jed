@@ -2219,18 +2219,6 @@ void split_command(std::wstring& first, std::wstring& remainder, const std::wstr
   remainder = command.substr(pos_quote_2 + 1);
   }
 
-bool remove_quotes(std::wstring& cmd)
-  {
-  bool has_quotes = false;
-  while (cmd.size() >= 2 && cmd.front() == L'"' && cmd.back() == L'"')
-    {
-    cmd.erase(cmd.begin());
-    cmd.pop_back();
-    has_quotes = true;
-    }
-  return has_quotes;
-  }
-
 char** alloc_arguments(const std::string& path, const std::vector<std::string>& parameters)
   {
   char** argv = new char*[parameters.size() + 2];
@@ -3210,6 +3198,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   if (argc > 1)
     {
     std::string input(argv[1]);
+    remove_quotes(input);
     if (jtk::is_directory(input))
       {
       state.buffer = read_from_file(input);

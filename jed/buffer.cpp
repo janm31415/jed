@@ -20,7 +20,7 @@ file_buffer make_empty_buffer()
 
 namespace
   {
-  bool remove_quotes(std::string& cmd)
+  inline bool local_remove_quotes(std::string& cmd)
     {
     bool has_quotes = false;
     while (cmd.size() >= 2 && cmd.front() == '"' && cmd.back() == '"')
@@ -36,7 +36,7 @@ namespace
 file_buffer read_from_file(std::string filename)
   {
   using namespace jtk;
-  remove_quotes(filename);
+  local_remove_quotes(filename); 
   file_buffer fb = make_empty_buffer();
   fb.name = filename;  
   if (file_exists(filename))
