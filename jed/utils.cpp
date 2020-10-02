@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <jtk/file_utils.h>
+#include <algorithm>
 
 std::string get_file_in_executable_path(const std::string& filename)
   {
@@ -189,7 +190,9 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
 #ifdef _WIN32
   wchar_t buf[MAX_PATH];
   GetCurrentDirectoryW(MAX_PATH, buf);
-  std::string dir = jtk::convert_wstring_to_string(std::wstring(buf));
+  std::wstring wbuf(buf);
+  std::replace(wbuf.begin(), wbuf.end(), '\\', '/'); // replace all '\\' by '/'
+  std::string dir = jtk::convert_wstring_to_string(wbuf);
 #else
   char buf[PATH_MAX];
   getcwd(buf, sizeof(buf));

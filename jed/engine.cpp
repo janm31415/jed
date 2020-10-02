@@ -2418,7 +2418,7 @@ std::optional<app_state> load(app_state state, const std::wstring& command, sett
     return state;
   std::string folder = jtk::get_folder(state.buffer.name);
   if (folder.empty())
-    folder = jtk::get_executable_path();
+    folder = jtk::get_folder(jtk::get_executable_path());
   if (folder.back() != '\\' && folder.back() != '/')
     folder.push_back('/');
 
@@ -3208,7 +3208,22 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   bkgd(COLOR_PAIR(default_color));
 
   if (argc > 1)
-    state.buffer = read_from_file(std::string(argv[1]));
+    {
+    std::string input(argv[1]);
+    if (jtk::is_directory(input))
+      {
+      state.buffer = read_from_file(input);
+      }
+    else
+      {
+      std::string inputfile = get_file_path(input, std::string());
+      if (inputfile.empty())
+        {
+        inputfile = jtk::get_cwd() + input;
+        }
+      state.buffer = read_from_file(inputfile);
+      }
+    }
   else if (s.last_active_folder.empty())
     state.buffer = make_empty_buffer();
   else
