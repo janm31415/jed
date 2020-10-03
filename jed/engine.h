@@ -2,6 +2,7 @@
 
 #include "buffer.h"
 #include "settings.h"
+#include <array>
 #include <string>
 #include <vector>
 
@@ -31,7 +32,14 @@ struct app_state
   int64_t scroll_row, operation_scroll_row, command_scroll_row;    
   e_operation operation;  
   std::vector<e_operation> operation_stack;
+  std::wstring piped_prompt;
+#ifdef _WIN32
+  void* process;
+#else
+  std::array<int, 3> process;
+#endif  
   int w, h;
+  bool piped;
   };
 
 

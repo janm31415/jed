@@ -1369,11 +1369,38 @@ app_state del(app_state state, const settings& s)
     return del_operation(state, s);
   }
 
+app_state check_pipes(bool& modifications, app_state state, const settings& s);
+
 app_state ret_editor(app_state state, const settings& s)
   {
-  std::string indentation("\n");    
-  indentation.append(get_row_indentation_pattern(state.buffer, state.buffer.pos.row));  
-  return text_input(state, indentation.c_str(), s);
+  if (state.piped && state.buffer.pos.row == (int64_t)state.buffer.content.size() - 1)
+    {
+    line ln = state.buffer.content[state.buffer.pos.row];
+    std::wstring wcmd(ln.begin(), ln.end());
+    size_t find_prompt = wcmd.find(state.piped_prompt);
+    if (find_prompt != std::wstring::npos)
+      {
+      wcmd = wcmd.substr(find_prompt + state.piped_prompt.size());
+      }
+    wcmd.erase(std::remove(wcmd.begin(), wcmd.end(), '\r'), wcmd.end());
+    std::string cmd = jtk::convert_wstring_to_string(wcmd);
+    cmd.push_back('\n');
+#ifdef _WIN32
+    send_to_pipe(state.process, cmd.c_str());
+#else
+    send_to_pipe(state.process.data(), cmd.c_str());
+#endif
+    state.buffer.pos = get_last_position(state.buffer);
+    state.buffer = insert(state.buffer, "\n", convert(s));
+    bool modifications;
+    return check_pipes(modifications, state, s);
+    }
+  else
+    {
+    std::string indentation("\n");
+    indentation.append(get_row_indentation_pattern(state.buffer, state.buffer.pos.row));
+    return text_input(state, indentation.c_str(), s);
+    }
   }
 
 app_state ret_command(app_state state, const settings& s)
@@ -1719,6 +1746,8 @@ std::optional<app_state> command_exit(app_state state, settings& s)
   state.operation = op_editing;
   if ((state.buffer.modification_mask & 1) == 1)
     {
+    if (state.piped && state.buffer.name.empty())
+      return std::nullopt;
     state.operation = op_query_save;
     state.operation_stack.push_back(op_exit);
     return make_save_buffer(state, s);
@@ -2176,6 +2205,11 @@ std::optional<app_state> command_tab_spaces(app_state state, settings& s)
   return state;
   }
 
+std::optional<app_state> command_piped_win(app_state state, settings& s)
+  {
+  return state;
+  }
+
 const auto executable_commands = std::map<std::wstring, std::function<std::optional<app_state>(app_state, settings&)>>
   {
   {L"AcmeTheme", command_acme_theme},
@@ -2204,6 +2238,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Tab2", command_tab_2},
   {L"Tab4", command_tab_4},
   {L"Tab8", command_tab_8},
+  {L"Win", command_piped_win},
   {L"Undo", command_undo},
   {L"Yes", command_yes}
   };
@@ -2450,33 +2485,16 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
       parameters.push_back(jtk::convert_wstring_to_string(first));
     else
       parameters.push_back(par_path);
-    if (has_quotes && pipe_cmd == '!')
+#ifdef _WIN32
+    if (has_quotes)
       {
       parameters.back().insert(parameters.back().begin(), '"');
       parameters.back().push_back('"');
       }
+#endif
     cmd_remainder = clean_command(rest);
     }
 
-  /*
-  active_folder af(jtk::get_folder(state.buffer.name).c_str());
-
-  char** argv = alloc_arguments(file_path, parameters);
-#ifdef _WIN32
-  void* process = nullptr;
-#else
-  pid_t process;
-#endif
-  int err = run_process(file_path.c_str(), argv, nullptr, &process);
-  free_arguments(argv);
-  if (err != 0)
-    {
-    std::string error_message = "Could not create child process";
-    state.message = string_to_line(error_message);
-  }
-  destroy_process(process, 0);
-  return state;
-  */
   if (pipe_cmd == '!')
     return execute_external(state, file_path, parameters);
   else if (pipe_cmd == '|')
@@ -2994,6 +3012,70 @@ std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, se
   return state;
   }
 
+app_state start_pipe(app_state state, const std::string& inputfile, int argc, char** orig_argv, const settings& s)
+  {
+  state.buffer = make_empty_buffer();
+  state.scroll_row = 0;
+  state.operation = op_editing;
+  std::vector<std::string> parameters;
+  for (int j = 2; j < argc; ++j)
+    parameters.emplace_back(orig_argv[j]);
+
+  char** argv = alloc_arguments(inputfile, parameters);
+#ifdef _WIN32
+  state.process = nullptr;
+  int err = create_pipe(inputfile.c_str(), argv, nullptr, &state.process);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    state.piped = false;
+    return state;
+    }
+  std::string text = read_from_pipe(state.process, 100);
+#else
+  int err = create_pipe(inputfile.c_str(), argv, nullptr, state.process.data());
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    state.piped = false;
+    return state;
+    }
+  std::string text = read_from_pipe(state.process, 100);
+#endif
+
+  state.buffer = insert(state.buffer, text, convert(s));
+  if (!state.buffer.content.empty())
+    {
+    auto last_line = state.buffer.content.back();
+    state.piped_prompt = std::wstring(last_line.begin(), last_line.end());
+    }
+  return state;
+  }
+
+app_state check_pipes(bool& modifications, app_state state, const settings& s)
+  {
+  modifications = false;
+  if (!state.piped)
+    return state;
+#ifdef _WIN32
+  std::string text = read_from_pipe(state.process, 10);
+#else
+  std::string text = read_from_pipe(state.process.data(), 10);
+#endif
+  if (text.empty())
+    return state;
+  modifications = true;
+  state.buffer.pos = get_last_position(state.buffer);
+  state.buffer = insert(state.buffer, text, convert(s));
+  auto last_line = state.buffer.content.back();
+  state.piped_prompt = std::wstring(last_line.begin(), last_line.end());
+  return check_scroll_position(state, s);
+  }
+
 std::optional<app_state> process_input(app_state state, settings& s)
   {
   SDL_Event event;
@@ -3369,6 +3451,16 @@ std::optional<app_state> process_input(app_state state, settings& s)
         } // switch (event.type)
       }
     std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(5.0));
+    auto toc = std::chrono::steady_clock::now();
+    auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(toc - tic).count();
+    if (state.piped && time_elapsed > 1000)
+      {
+      bool modifications;
+      state = check_pipes(modifications, state, s);
+      tic = std::chrono::steady_clock::now();
+      if (modifications)
+        return state;
+      }
     }
   }
 
@@ -3402,12 +3494,22 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   init_colors(s);
   bkgd(COLOR_PAIR(default_color));
 
+  state.piped = false;  
+
   if (argc > 1)
     {
     std::string input(argv[1]);
+
+    if (input[0] == '|') // piped
+      {
+      state.piped = true;
+      input.erase(input.begin());
+      }
+
     remove_quotes(input);
     if (jtk::is_directory(input))
       {
+      state.piped = false;
       auto inputfolder = jtk::get_cwd();
       if (inputfolder.back() != '\\' && inputfolder.back() != '/' && input.front() != '/')
         inputfolder.push_back('/');
@@ -3428,7 +3530,10 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 
         inputfile.append(input);
         }
-      state.buffer = read_from_file(inputfile);
+      if (state.piped)
+        state = start_pipe(state, inputfile, argc, argv, s);
+      else
+        state.buffer = read_from_file(inputfile);
       }
     }
   //else if (s.last_active_folder.empty())
@@ -3475,6 +3580,14 @@ void engine::run()
 
     SDL_UpdateWindowSurface(pdc_window);
     }
+
+#ifdef _WIN32
+  if (state.piped)
+    destroy_pipe(state.process, 9);
+#else
+  if (state.piped)
+    destroy_pipe(state.process.data(), 9);
+#endif
 
   s.w = state.w / font_width;
   s.h = state.h / font_height;
