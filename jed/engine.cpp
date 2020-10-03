@@ -1565,11 +1565,13 @@ app_state replace_all(app_state state, settings& s)
   return check_scroll_position(state, s);
   }
 
-app_state prepare_replace(app_state state, const settings& s)
+app_state make_replace_buffer(app_state state, const settings& s)
   {
   state = clear_operation_buffer(state);
   state.operation = op_replace;
   state.operation_buffer = insert(state.operation_buffer, s.last_replace, convert(s), false);
+  state.operation_buffer.start_selection = position(0, 0);
+  state.operation_buffer = move_end(state.operation_buffer, convert(s));
   return check_scroll_position(state, s);
   }
 
@@ -1626,7 +1628,7 @@ std::optional<app_state> ret_operation(app_state state, settings& s)
       case op_open: state = open_file(state, s); break;
       case op_save: state = save_file(state); break;
       case op_query_save: state = save_file(state); break;
-      case op_from_find_to_replace: state = prepare_replace(state, s); break;
+      case op_from_find_to_replace: state = make_replace_buffer(state, s); break;
       case op_replace: state = replace(state, s); break;
       case op_new: state = make_new_buffer(state); break;
       case op_get: state = get(state); break;
@@ -2948,6 +2950,14 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_F3:
           {
+          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+            {
+            auto fb = state.operation == op_editing ? state.buffer : (state.operation == op_command_editing ? state.command_buffer : state.operation_buffer);
+            if (has_selection(fb))
+              {
+              s.last_find = to_string(get_selection(fb, convert(s)));
+              }
+            }
           return find_next(state, s);
           }
           case SDLK_F5:
