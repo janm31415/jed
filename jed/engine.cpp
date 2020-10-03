@@ -2294,7 +2294,7 @@ app_state execute_external_input(app_state state, const std::string& file_path, 
   std::string text = read_from_pipe(process, 100);
 #else
   int pipefd[3];
-  int err = JAM::create_pipe(file_path.c_str(), argv, nullptr, pipefd);
+  int err = create_pipe(file_path.c_str(), argv, nullptr, pipefd);
   free_arguments(argv);
   if (err != 0)
     {
@@ -2302,7 +2302,7 @@ app_state execute_external_input(app_state state, const std::string& file_path, 
     state.message = string_to_line(error_message);
     return state;
     }
-  std::string text = JAM::read_from_pipe(pipefd, 50);
+  std::string text = read_from_pipe(pipefd, 50);
 #endif
 
   state.buffer = insert(state.buffer, text, convert(s));
