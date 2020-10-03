@@ -2302,7 +2302,105 @@ app_state execute_external_input(app_state state, const std::string& file_path, 
     state.message = string_to_line(error_message);
     return state;
     }
-  std::string text = read_from_pipe(pipefd, 50);
+  std::string text = read_from_pipe(pipefd, 100);
+#endif
+
+  state.buffer = insert(state.buffer, text, convert(s));
+
+#ifdef _WIN32        
+  destroy_pipe(process, 10);
+#else
+  destroy_pipe(pipefd, 10);
+#endif
+  return state;
+  }
+
+app_state execute_external_output(app_state state, const std::string& file_path, const std::vector<std::string>& parameters, const settings& s)
+  {
+  auto woutput = to_wstring(get_selection(state.buffer, convert(s)));
+  woutput.erase(std::remove(woutput.begin(), woutput.end(), '\r'), woutput.end());
+  if (!woutput.empty() && woutput.back() != '\n')
+    woutput.push_back('\n');
+  auto output = jtk::convert_wstring_to_string(woutput);
+
+  active_folder af(jtk::get_folder(state.buffer.name).c_str());
+
+  char** argv = alloc_arguments(file_path, parameters);
+#ifdef _WIN32
+  void* process = nullptr;
+  int err = create_pipe(file_path.c_str(), argv, nullptr, &process);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  int res = send_to_pipe(process, output.c_str());
+  if (res != NO_ERROR)
+    {
+    state.message = string_to_line(std::string("Error writing to external process"));
+    return state;
+    }
+  destroy_pipe(process, 10);
+#else
+  int pipefd[3];
+  int err = create_pipe(file_path.c_str(), argv, nullptr, pipefd);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  send_to_pipe(pipefd, output.c_str());
+  JAM::destroy_pipe(pipefd, 10);
+#endif
+
+  return state;
+  }
+
+
+app_state execute_external_input_output(app_state state, const std::string& file_path, const std::vector<std::string>& parameters, const settings& s)
+  {
+  auto woutput = to_wstring(get_selection(state.buffer, convert(s)));
+  woutput.erase(std::remove(woutput.begin(), woutput.end(), '\r'), woutput.end());
+  if (!woutput.empty() && woutput.back() != '\n')
+    woutput.push_back('\n');
+  auto output = jtk::convert_wstring_to_string(woutput);
+
+  active_folder af(jtk::get_folder(state.buffer.name).c_str());
+
+  char** argv = alloc_arguments(file_path, parameters);
+#ifdef _WIN32
+  void* process = nullptr;
+  int err = create_pipe(file_path.c_str(), argv, nullptr, &process);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  int res = send_to_pipe(process, output.c_str());
+  if (res != NO_ERROR)
+    {
+    state.message = string_to_line(std::string("Error writing to external process"));
+    return state;
+    }
+  std::string text = read_from_pipe(process, 100);
+#else
+  int pipefd[3];
+  int err = create_pipe(file_path.c_str(), argv, nullptr, pipefd);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  send_to_pipe(pipefd, output.c_str());
+  std::string text = read_from_pipe(pipefd, 100);
 #endif
 
   state.buffer = insert(state.buffer, text, convert(s));
@@ -2381,8 +2479,13 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
   */
   if (pipe_cmd == '!')
     return execute_external(state, file_path, parameters);
+  else if (pipe_cmd == '|')
+    return execute_external_input_output(state, file_path, parameters, s);
   else if (pipe_cmd == '<')
     return execute_external_input(state, file_path, parameters, s);
+  else if (pipe_cmd == '>')
+    return execute_external_output(state, file_path, parameters, s);
+
   return state;
   }
 
