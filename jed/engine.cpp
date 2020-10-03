@@ -1156,10 +1156,10 @@ app_state move_home_command(app_state state, const settings& s)
   return state;
   }
 
-app_state move_home_operation(app_state state)
+app_state move_home_operation(app_state state, const settings& s)
   {
   state = cancel_selection(state);
-  state.operation_buffer.pos.col = 0;
+  state.operation_buffer = move_home(state.operation_buffer, convert(s));
   return state;
   }
 
@@ -1170,7 +1170,7 @@ app_state move_home(app_state state, const settings& s)
   else if (state.operation == op_command_editing)
     return move_home_command(state, s);
   else
-    return move_home_operation(state);
+    return move_home_operation(state, s);
   }
 
 app_state move_end_editor(app_state state, const settings& s)
@@ -1187,14 +1187,13 @@ app_state move_end_command(app_state state, const settings& s)
   return state;
   }
 
-app_state move_end_operation(app_state state)
+app_state move_end_operation(app_state state, const settings& s)
   {
   state = cancel_selection(state);
   if (state.operation_buffer.content.empty())
     return state;
 
-  state.operation_buffer.pos.col = (int64_t)state.operation_buffer.content[0].size();
-  state.operation_buffer.pos.row = 0;
+  state.operation_buffer = move_end(state.operation_buffer, convert(s));
   return state;
   }
 
@@ -1205,7 +1204,7 @@ app_state move_end(app_state state, const settings& s)
   else if (state.operation == op_command_editing)
     return move_end_command(state, s);
   else
-    return move_end_operation(state);
+    return move_end_operation(state, s);
   }
 
 app_state text_input_editor(app_state state, const char* txt, const settings& s)
@@ -1451,8 +1450,18 @@ app_state save_file(app_state state)
   std::wstring wfilename;
   if (!state.operation_buffer.content.empty())
     wfilename = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
-  std::replace(wfilename.begin(), wfilename.end(), '\\', '/'); // replace all '\\' by '/'
+  std::replace(wfilename.begin(), wfilename.end(), '\\', '/'); // replace all '\\' by '/'      
   std::string filename = clean_filename(jtk::convert_wstring_to_string(wfilename));
+  
+  if (jtk::get_folder(filename).empty())
+    {
+    std::string newfilename = jtk::get_cwd();
+    if (newfilename.back() != '\\' && newfilename.back() != '/')
+      newfilename.push_back('/');
+    newfilename.append(filename);
+    newfilename.swap(filename);
+    }
+  
   //if (filename.find(' ') != std::string::npos)
   //  {
   //  filename.push_back('"');
@@ -1673,6 +1682,8 @@ std::optional<app_state> make_find_buffer(app_state state, settings& s)
   {
   state = clear_operation_buffer(state);
   state.operation_buffer = insert(state.operation_buffer, s.last_find, convert(s), false);
+  state.operation_buffer.start_selection = position(0,0);
+  state.operation_buffer = move_end(state.operation_buffer, convert(s));
   return state;
   }
 
@@ -3210,7 +3221,11 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
       std::string inputfile = get_file_path(input, std::string());
       if (inputfile.empty())
         {
-        inputfile = jtk::get_cwd() + input;
+        inputfile = jtk::get_cwd();
+        if (inputfile.back() != '\\' && inputfile.back() != '/')
+          inputfile.push_back('/');
+
+        inputfile.append(input);
         }
       state.buffer = read_from_file(inputfile);
       }
