@@ -2354,7 +2354,7 @@ app_state execute_external_output(app_state state, const std::string& file_path,
     return state;
     }
   send_to_pipe(pipefd, output.c_str());
-  JAM::destroy_pipe(pipefd, 10);
+  destroy_pipe(pipefd, 10);
 #endif
 
   return state;
@@ -2450,7 +2450,7 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
       parameters.push_back(jtk::convert_wstring_to_string(first));
     else
       parameters.push_back(par_path);
-    if (has_quotes)
+    if (has_quotes && pipe_cmd == '!')
       {
       parameters.back().insert(parameters.back().begin(), '"');
       parameters.back().push_back('"');
@@ -3408,6 +3408,13 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
     remove_quotes(input);
     if (jtk::is_directory(input))
       {
+      auto inputfolder = jtk::get_cwd();
+      if (inputfolder.back() != '\\' && inputfolder.back() != '/' && input.front() != '/')
+        inputfolder.push_back('/');
+      inputfolder.append(input);
+      if (jtk::is_directory(inputfolder))
+        input.swap(inputfolder);
+
       state.buffer = read_from_file(input);
       }
     else
