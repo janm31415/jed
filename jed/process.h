@@ -126,16 +126,17 @@ inline int run_process(const char *path, char * const * argv, const char* curren
   pid_t pid = fork();
     
   if (pid < 0)
-    throw std::runtime_error("failed to fork");
-  if (pid == 0)
-    {        
-    if (execv(path, argv) == -1)
-      throw std::runtime_error("failed to pipe (execl failed)");
-    exit(1);
+    {
+    printf(("\nfailed to fork child\n");
+    return;
     }
-  
+  else if (pid == 0)
+    {        
+    if (execv(path, argv) < 0)
+      printf("\nCould not run process (execv failed)\n");
+    exit(0);
+    }    
   *process = pid;
-
   return 0;
   }
 
