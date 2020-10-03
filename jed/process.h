@@ -127,8 +127,8 @@ inline int run_process(const char *path, char * const * argv, const char* curren
     
   if (pid < 0)
     {
-    printf(("\nfailed to fork child\n");
-    return;
+    printf("\nfailed to fork child\n");
+    return -1;
     }
   else if (pid == 0)
     {        
