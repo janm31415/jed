@@ -16,3 +16,6 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
 
 bool remove_quotes(std::string& cmd);
 bool remove_quotes(std::wstring& cmd);
+
+void remove_whitespace(std::string& cmd);
+void remove_whitespace(std::wstring& cmd);

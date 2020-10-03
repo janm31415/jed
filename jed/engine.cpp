@@ -5,6 +5,7 @@
 #include "keyboard.h"
 #include "mouse.h"
 #include "pdcex.h"
+#include "pipe.h"
 #include "process.h"
 #include "syntax_highlight.h"
 #include "utils.h"
@@ -1393,6 +1394,7 @@ line string_to_line(const std::string& txt)
 
 std::string clean_filename(std::string name)
   {
+  /*
   while (!name.empty() && name.back() == ' ')
     name.pop_back();
   while (!name.empty() && name.front() == ' ')
@@ -1402,6 +1404,9 @@ std::string clean_filename(std::string name)
     name.erase(name.begin());
     name.pop_back();
     }
+    */
+  remove_whitespace(name);
+  remove_quotes(name);
   return name;
   }
 
@@ -2249,6 +2254,67 @@ void free_arguments(char** argv)
   delete[] argv;
   }
 
+app_state execute_external(app_state state, const std::string& file_path, const std::vector<std::string>& parameters)
+  {
+  active_folder af(jtk::get_folder(state.buffer.name).c_str());
+
+  char** argv = alloc_arguments(file_path, parameters);
+#ifdef _WIN32
+  void* process = nullptr;
+#else
+  pid_t process;
+#endif
+  int err = run_process(file_path.c_str(), argv, nullptr, &process);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  destroy_process(process, 0);
+  return state;
+  }
+
+app_state execute_external_input(app_state state, const std::string& file_path, const std::vector<std::string>& parameters, const settings& s)
+  {
+  active_folder af(jtk::get_folder(state.buffer.name).c_str());
+
+  char** argv = alloc_arguments(file_path, parameters);
+#ifdef _WIN32
+  void* process = nullptr;
+  int err = create_pipe(file_path.c_str(), argv, nullptr, &process);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  std::string text = read_from_pipe(process, 100);
+#else
+  int pipefd[3];
+  int err = JAM::create_pipe(file_path.c_str(), argv, nullptr, pipefd);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  std::string text = JAM::read_from_pipe(pipefd, 50);
+#endif
+
+  state.buffer = insert(state.buffer, text, convert(s));
+
+#ifdef _WIN32        
+  destroy_pipe(process, 10);
+#else
+  destroy_pipe(pipefd, 10);
+#endif
+  return state;
+  }
+
 std::optional<app_state> execute(app_state state, const std::wstring& command, settings& s)
   {
   auto it = executable_commands.find(command);
@@ -2259,6 +2325,14 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
 
   std::wstring cmd_id, cmd_remainder;
   split_command(cmd_id, cmd_remainder, command);
+  char pipe_cmd = cmd_id[0];
+  if (pipe_cmd == '!' || pipe_cmd == '<' || pipe_cmd == '>' || pipe_cmd == '|')
+    {
+    cmd_id.erase(cmd_id.begin());
+    }
+  else
+    pipe_cmd = '!';
+  remove_whitespace(cmd_id);
   remove_quotes(cmd_id);
 
   auto file_path = get_file_path(jtk::convert_wstring_to_string(cmd_id), state.buffer.name);
@@ -2286,6 +2360,7 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
     cmd_remainder = clean_command(rest);
     }
 
+  /*
   active_folder af(jtk::get_folder(state.buffer.name).c_str());
 
   char** argv = alloc_arguments(file_path, parameters);
@@ -2302,6 +2377,12 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
     state.message = string_to_line(error_message);
   }
   destroy_process(process, 0);
+  return state;
+  */
+  if (pipe_cmd == '!')
+    return execute_external(state, file_path, parameters);
+  else if (pipe_cmd == '<')
+    return execute_external_input(state, file_path, parameters, s);
   return state;
   }
 

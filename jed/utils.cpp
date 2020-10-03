@@ -210,6 +210,22 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
   return "";
   }
 
+void remove_whitespace(std::string& cmd)
+  {
+  while (!cmd.empty() && (cmd.front() == ' ' || cmd.front() == '\t' || cmd.front() == '\r' || cmd.front() == '\n'))
+    cmd.erase(cmd.begin());
+  while (!cmd.empty() && (cmd.back() == ' ' || cmd.back() == '\t' || cmd.back() == '\r' || cmd.back() == '\n'))
+    cmd.pop_back();
+  }
+
+void remove_whitespace(std::wstring& cmd)
+  {
+  while (!cmd.empty() && (cmd.front() == L' ' || cmd.front() == L'\t' || cmd.front() == L'\r' || cmd.front() == L'\n'))
+    cmd.erase(cmd.begin());
+  while (!cmd.empty() && (cmd.back() == L' ' || cmd.back() == L'\t' || cmd.back() == L'\r' || cmd.back() == L'\n'))
+    cmd.pop_back();
+  }
+
 bool remove_quotes(std::string& cmd)
   {
   bool has_quotes = false;
@@ -225,6 +241,8 @@ bool remove_quotes(std::string& cmd)
 bool remove_quotes(std::wstring& cmd)
   {
   bool has_quotes = false;
+  while (!cmd.empty() && cmd.front() == L' ')
+    cmd.erase(cmd.begin());
   while (cmd.size() >= 2 && cmd.front() == L'"' && cmd.back() == L'"')
     {
     cmd.erase(cmd.begin());

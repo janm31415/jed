@@ -32,6 +32,7 @@ jedicon.h
 keyboard.h
 mouse.h
 pdcex.h
+pipe.h
 pref_file.h
 process.h
 settings.h
