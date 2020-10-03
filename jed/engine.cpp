@@ -3044,7 +3044,7 @@ app_state start_pipe(app_state state, const std::string& inputfile, int argc, ch
     state.piped = false;
     return state;
     }
-  std::string text = read_from_pipe(state.process, 100);
+  std::string text = read_from_pipe(state.process.data(), 100);
 #endif
 
   state.buffer = insert(state.buffer, text, convert(s));
@@ -3500,7 +3500,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
     {
     std::string input(argv[1]);
 
-    if (input[0] == '|') // piped
+    if (input[0] == '=') // piped
       {
       state.piped = true;
       input.erase(input.begin());
