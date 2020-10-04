@@ -150,12 +150,18 @@ namespace
     return vec;
     }
 
-  std::vector<std::wstring> split_wstring_by_wchar(std::wstring str, wchar_t ch)
+  std::vector<std::wstring> split_wstring_by_wchar(std::wstring str, const std::wstring& separators)
     {
     std::vector<std::wstring> out;
     while (!str.empty())
       {
-      auto it = str.find_first_of(ch);
+      auto it = std::wstring::npos;
+      int idx = 0;
+      while (it == std::wstring::npos && idx < separators.length())     
+        { 
+        it = str.find_first_of(separators[idx]);
+        ++idx;
+        }
       if (it == std::wstring::npos)
         {
         out.push_back(str);
@@ -235,9 +241,12 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
     }
 
   std::string path = getenv(std::string("PATH"));
-  auto path_list = split_wstring_by_wchar(jtk::convert_string_to_wstring(path), L';');
+    
+  std::wstring sep(L";:");
+  auto path_list = split_wstring_by_wchar(jtk::convert_string_to_wstring(path), sep); 
+  
   for (const auto& folder_in_path : path_list)
-    {
+    {  
     auto possible_files = jtk::get_files_from_directory(jtk::convert_wstring_to_string(folder_in_path), false);
     for (const auto& possible_file : possible_files)
       {
@@ -248,7 +257,6 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
         }
       }
     }
-
   return "";
   }
 
@@ -304,7 +312,7 @@ std::string getenv(const std::string& name)
   std::wstring wresult(path);
   std::string out = jtk::convert_wstring_to_string(wresult);
 #else
-  std::string out(getenv(name));
+  std::string out(getenv(name.c_str()));
 #endif
   return out;
   }
