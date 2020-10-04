@@ -3041,7 +3041,7 @@ app_state start_pipe(app_state state, const std::string& inputfile, int argc, ch
     {
     std::string error_message = "Could not create child process";
     state.message = string_to_line(error_message);
-    state.piped = false;
+    state.wt = wt_normal;
     return state;
     }
   std::string text = read_from_pipe(state.process.data(), 100);
