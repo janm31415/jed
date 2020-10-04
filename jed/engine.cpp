@@ -1443,7 +1443,7 @@ app_state open_file(app_state state, const settings& s)
   std::wstring wfilename;
   if (!state.operation_buffer.content.empty())
     wfilename = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
-  std::replace(wfilename.begin(), wfilename.end(), '\\', '/'); // replace all '\\' by '/'
+  std::replace(wfilename.begin(), wfilename.end(), L'\\', L'/'); // replace all '\\' by '/'
   std::string filename = clean_filename(jtk::convert_wstring_to_string(wfilename));
   if (filename.find(' ') != std::string::npos)
     {
@@ -1482,7 +1482,7 @@ app_state save_file(app_state state)
   std::wstring wfilename;
   if (!state.operation_buffer.content.empty())
     wfilename = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
-  std::replace(wfilename.begin(), wfilename.end(), '\\', '/'); // replace all '\\' by '/'      
+  std::replace(wfilename.begin(), wfilename.end(), L'\\', L'/'); // replace all '\\' by '/'      
   std::string filename = clean_filename(jtk::convert_wstring_to_string(wfilename));
   
   if (jtk::get_folder(filename).empty())

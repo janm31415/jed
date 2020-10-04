@@ -149,6 +149,32 @@ namespace
     vec[255] = 0x00A0;
     return vec;
     }
+
+  std::vector<std::wstring> split_wstring_by_wchar(std::wstring str, wchar_t ch)
+    {
+    std::vector<std::wstring> out;
+    while (!str.empty())
+      {
+      auto it = str.find_first_of(ch);
+      if (it == std::wstring::npos)
+        {
+        out.push_back(str);
+        str.clear();
+        }
+      else
+        {
+        out.push_back(str.substr(0, it));        
+        str.erase(0, it + 1);        
+        }
+      }
+    for (auto& p : out)
+      {
+      std::replace(p.begin(), p.end(), L'\\', L'/');
+      if (p.back() != L'/')
+        p.push_back(L'/');
+      }
+    return out;
+    }
   }
 
 uint16_t ascii_to_utf16(unsigned char ch)
@@ -207,6 +233,22 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
       return path;
       }
     }
+
+  std::string path = getenv(std::string("PATH"));
+  auto path_list = split_wstring_by_wchar(jtk::convert_string_to_wstring(path), L';');
+  for (const auto& folder_in_path : path_list)
+    {
+    auto possible_files = jtk::get_files_from_directory(jtk::convert_wstring_to_string(folder_in_path), false);
+    for (const auto& possible_file : possible_files)
+      {
+      auto f = jtk::get_filename(possible_file);
+      if (f == filename || jtk::remove_extension(f) == filename)
+        {
+        return possible_file;
+        }
+      }
+    }
+
   return "";
   }
 
@@ -237,7 +279,7 @@ bool remove_quotes(std::string& cmd)
     }
   return has_quotes;
   }
-  
+
 bool remove_quotes(std::wstring& cmd)
   {
   bool has_quotes = false;
@@ -250,4 +292,19 @@ bool remove_quotes(std::wstring& cmd)
     has_quotes = true;
     }
   return has_quotes;
+  }
+
+std::string getenv(const std::string& name)
+  {
+#ifdef _WIN32
+  std::wstring ws = jtk::convert_string_to_wstring(name);
+  wchar_t* path = _wgetenv(ws.c_str());
+  if (!path)
+    return nullptr;
+  std::wstring wresult(path);
+  std::string out = jtk::convert_wstring_to_string(wresult);
+#else
+  std::string out(getenv(name));
+#endif
+  return out;
   }

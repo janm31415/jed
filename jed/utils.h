@@ -19,3 +19,5 @@ bool remove_quotes(std::wstring& cmd);
 
 void remove_whitespace(std::string& cmd);
 void remove_whitespace(std::wstring& cmd);
+
+std::string getenv(const std::string& name);
