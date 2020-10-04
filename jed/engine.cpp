@@ -1373,7 +1373,7 @@ app_state check_pipes(bool& modifications, app_state state, const settings& s);
 
 app_state ret_editor(app_state state, const settings& s)
   {
-  if (state.piped && state.buffer.pos.row == (int64_t)state.buffer.content.size() - 1)
+  if (state.wt == wt_piped && state.buffer.pos.row == (int64_t)state.buffer.content.size() - 1)
     {
     line ln = state.buffer.content[state.buffer.pos.row];
     std::wstring wcmd(ln.begin(), ln.end());
@@ -1746,7 +1746,7 @@ std::optional<app_state> command_exit(app_state state, settings& s)
   state.operation = op_editing;
   if ((state.buffer.modification_mask & 1) == 1)
     {
-    if (state.piped && state.buffer.name.empty())
+    if (state.wt != wt_normal && state.buffer.name.empty())
       return std::nullopt;
     state.operation = op_query_save;
     state.operation_stack.push_back(op_exit);
@@ -3030,7 +3030,7 @@ app_state start_pipe(app_state state, const std::string& inputfile, int argc, ch
     {
     std::string error_message = "Could not create child process";
     state.message = string_to_line(error_message);
-    state.piped = false;
+    state.wt = wt_normal;
     return state;
     }
   std::string text = read_from_pipe(state.process, 100);
@@ -3059,7 +3059,7 @@ app_state start_pipe(app_state state, const std::string& inputfile, int argc, ch
 app_state check_pipes(bool& modifications, app_state state, const settings& s)
   {
   modifications = false;
-  if (!state.piped)
+  if (state.wt != wt_piped)
     return state;
 #ifdef _WIN32
   std::string text = read_from_pipe(state.process, 10);
@@ -3453,7 +3453,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
     std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(5.0));
     auto toc = std::chrono::steady_clock::now();
     auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(toc - tic).count();
-    if (state.piped && time_elapsed > 1000)
+    if (state.wt == wt_piped && time_elapsed > 1000)
       {
       bool modifications;
       state = check_pipes(modifications, state, s);
@@ -3494,7 +3494,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   init_colors(s);
   bkgd(COLOR_PAIR(default_color));
 
-  state.piped = false;  
+  state.wt = wt_normal;  
 
   if (argc > 1)
     {
@@ -3502,14 +3502,14 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 
     if (input[0] == '=') // piped
       {
-      state.piped = true;
+      state.wt = wt_piped;
       input.erase(input.begin());
       }
 
     remove_quotes(input);
     if (jtk::is_directory(input))
       {
-      state.piped = false;
+      state.wt = wt_normal;
       auto inputfolder = jtk::get_cwd();
       if (inputfolder.back() != '\\' && inputfolder.back() != '/' && input.front() != '/')
         inputfolder.push_back('/');
@@ -3530,7 +3530,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 
         inputfile.append(input);
         }
-      if (state.piped)
+      if (state.wt == wt_piped)
         state = start_pipe(state, inputfile, argc, argv, s);
       else
         state.buffer = read_from_file(inputfile);
@@ -3582,10 +3582,10 @@ void engine::run()
     }
 
 #ifdef _WIN32
-  if (state.piped)
+  if (state.wt == wt_piped)
     destroy_pipe(state.process, 9);
 #else
-  if (state.piped)
+  if (state.wt == wt_piped)
     destroy_pipe(state.process.data(), 9);
 #endif
 

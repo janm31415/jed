@@ -22,6 +22,13 @@ enum e_operation
   op_new
   };
 
+enum e_window_type
+  {
+  wt_normal,
+  wt_piped,
+  wt_terminal
+  };
+
 struct app_state
   {
   file_buffer buffer;
@@ -39,7 +46,7 @@ struct app_state
   std::array<int, 3> process;
 #endif  
   int w, h;
-  bool piped;
+  e_window_type wt;
   };
 
 
