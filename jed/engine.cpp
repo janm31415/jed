@@ -175,6 +175,9 @@ uint16_t character_to_pdc_char(uint32_t character, uint32_t char_id, const setti
     return 32; break;
     }
     case 32: return s.show_all_characters ? 46 : 32; break;
+#ifdef _WIN32
+    case 65440: return (uint16_t)' '; // This sign is a half-width space. It's used by cmd.exe on Windows for file sizes.
+#endif
     default: return (uint16_t)character;
     }
   }

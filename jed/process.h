@@ -36,13 +36,16 @@ inline int run_process(const char *path, char * const * argv, const char* curren
 
   std::wstring wcmdLine;  
   wcmdLine = jtk::convert_string_to_wstring(std::string(path));
+  std::replace(wcmdLine.begin(), wcmdLine.end(), L'/', L'\\');
 
   // i = 0 equals path, is for linux
   size_t i = 1;
   const char* arg = argv[i];
   while (arg)
     {
-    wcmdLine.append(L" " + jtk::convert_string_to_wstring(std::string(arg)));
+    std::wstring warg = jtk::convert_string_to_wstring(std::string(arg));
+    std::replace(warg.begin(), warg.end(), L'/', L'\\');
+    wcmdLine.append(L" " + warg);
     arg = argv[++i];
     }
   /* Now create the child process. */

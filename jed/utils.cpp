@@ -150,18 +150,12 @@ namespace
     return vec;
     }
 
-  std::vector<std::wstring> split_wstring_by_wchar(std::wstring str, const std::wstring& separators)
+  std::vector<std::wstring> split_wstring_by_wchar(std::wstring str, wchar_t separator)
     {
     std::vector<std::wstring> out;
     while (!str.empty())
       {
-      auto it = std::wstring::npos;
-      int idx = 0;
-      while (it == std::wstring::npos && idx < separators.length())     
-        { 
-        it = str.find_first_of(separators[idx]);
-        ++idx;
-        }
+      auto it = str.find_first_of(separator);
       if (it == std::wstring::npos)
         {
         out.push_back(str);
@@ -242,8 +236,11 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
 
   std::string path = getenv(std::string("PATH"));
     
-  std::wstring sep(L";:");
-  auto path_list = split_wstring_by_wchar(jtk::convert_string_to_wstring(path), sep); 
+#ifdef _WIN32
+  auto path_list = split_wstring_by_wchar(jtk::convert_string_to_wstring(path), L';'); 
+#else
+  auto path_list = split_wstring_by_wchar(jtk::convert_string_to_wstring(path), L':');
+#endif
   
   for (const auto& folder_in_path : path_list)
     {  
