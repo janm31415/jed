@@ -1412,7 +1412,8 @@ app_state ret_editor(app_state state, const settings& s)
     state.buffer.pos = get_last_position(state.buffer);
     state.buffer = insert(state.buffer, "\n", convert(s));
     bool modifications;
-    return check_pipes(modifications, state, s);
+    state = check_pipes(modifications, state, s);
+    return check_scroll_position(state, s);
     }
   else
     {
@@ -2037,6 +2038,8 @@ std::optional<app_state> command_kill(app_state state, settings& s)
     state.wt = wt_normal;
     }
 #endif
+  if (!state.buffer.name.empty() && state.buffer.name[0] == '+')
+    state.buffer.name.clear();
   return state;
   }
 
@@ -3145,7 +3148,8 @@ app_state start_pipe(app_state state, const std::string& inputfile, const std::v
     auto last_line = state.buffer.content.back();
     state.piped_prompt = std::wstring(last_line.begin(), last_line.end());
     }
-  return state;
+  state.buffer.pos = get_last_position(state.buffer);
+  return check_scroll_position(state, s);
   }
 
 app_state start_pipe(app_state state, const std::string& inputfile, int argc, char** argv, settings& s)
