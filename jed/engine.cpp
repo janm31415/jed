@@ -1836,7 +1836,11 @@ std::optional<app_state> command_redo(app_state state, settings& s)
 #ifndef _WIN32
 std::string pbpaste()
 {
+#if defined(__APPLE__)
   FILE* pipe = popen("pbpaste", "r");
+#else
+  FILE* pipe = popen("xclip -o", "r");
+#endif
   if (!pipe) return "ERROR";
   char buffer[128];
   std::string result = "";
@@ -1865,9 +1869,13 @@ std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings&
   std::wstring txt = to_wstring(state.snarf_buffer);
   copy_to_windows_clipboard(jtk::convert_wstring_to_string(txt));
 #else
-  std::string txt = to_string(state.snarf_buffer);
+  std::string txt = to_string(state.snarf_buffer);  
   int pipefd[3];
+#if defined(__APPLE__)
   std::string pbcopy = get_file_path("pbcopy", "");
+#else
+  std::string pbcopy = get_file_path("xclip", "");
+#endif  
   char** argv = alloc_arguments(pbcopy, std::vector<std::string>());
   int err = create_pipe(pbcopy.c_str(), argv, nullptr, pipefd);
   free_arguments(argv);
