@@ -2313,9 +2313,12 @@ std::optional<app_state> command_piped_win(app_state state,  std::wstring& param
   std::string exepath = jtk::get_executable_path();
   exepath.insert(exepath.begin(), '"');
   exepath.push_back('"');
-  exepath.push_back(' ');
-  exepath.push_back('=');
-  exepath.append(jtk::convert_wstring_to_string(parameters));
+  if (!parameters.empty())
+    {
+    exepath.push_back(' ');
+    exepath.push_back('=');
+    exepath.append(jtk::convert_wstring_to_string(parameters));
+    }
   return execute(state, jtk::convert_string_to_wstring(exepath), s);  
   }
 
