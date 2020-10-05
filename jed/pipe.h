@@ -343,11 +343,14 @@ inline int create_pipe(const char *path, char* const* argv, const char* current_
 
 inline void destroy_pipe(int* pipefd, int)
   {
-  kill(pipefd[2], SIGKILL);
-  int status;
-  waitpid(pipefd[2], &status, 0);
-  close(pipefd[0]);
-  close(pipefd[1]);
+  if (pipefd[2]>= 0)
+    {
+    kill(pipefd[2], SIGKILL);
+    int status;
+    waitpid(pipefd[2], &status, 0);
+    close(pipefd[0]);
+    close(pipefd[1]);
+    }
   }
 
 inline int send_to_pipe(int* pipefd, const char* message)

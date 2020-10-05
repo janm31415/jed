@@ -2033,7 +2033,7 @@ std::optional<app_state> command_kill(app_state state, settings& s)
   if (state.wt == wt_piped)
     {
     destroy_pipe(state.process.data(), 9);
-    state.process[0] = state.process[1] = state.process[2] = 0;
+    state.process[0] = state.process[1] = state.process[2] = -1;
     state.wt = wt_normal;
     }
 #endif
@@ -3589,7 +3589,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 #ifdef _WIN32
   state.process = nullptr;
 #else
-  state.process[0] = state.process[1] = state.process[2] = 0;
+  state.process[0] = state.process[1] = state.process[2] = -1;
 #endif
 
   nodelay(stdscr, TRUE);

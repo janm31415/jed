@@ -235,6 +235,10 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
     }
 
   std::string path = getenv(std::string("PATH"));
+
+#if defined(__APPLE__)
+  path.append(std::string(":/usr/local/bin"));
+#endif
     
 #ifdef _WIN32
   auto path_list = split_wstring_by_wchar(jtk::convert_string_to_wstring(path), L';'); 
