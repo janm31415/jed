@@ -83,7 +83,13 @@ add_executable(jed WIN32 ${HDRS} ${SRCS} ${JSON} jed.rc resource.h)
 endif (WIN32)
 
 if (UNIX)
-add_executable(jed ${HDRS} ${SRCS} ${JSON})
+  if (APPLE)
+    set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO")
+    set(CMAKE_XCODE_ATTRIBUTE_OTHER_CODE_SIGN_FLAGS "--deep" CACHE STRING "Other Code Signing Flags" FORCE)
+    add_executable(jed MACOSX_BUNDLE ${HDRS} ${SRCS} ${JSON})
+  else (APPLE)
+    add_executable(jed ${HDRS} ${SRCS} ${JSON})
+  endif (APPLE)
 endif (UNIX)
 
 source_group("Header Files" FILES ${HDRS})
@@ -108,5 +114,5 @@ target_link_libraries(jed
     ${SDL_TTF_LIBRARIES}
     )	
 
-add_custom_command(TARGET jed POST_BUILD 
+add_custom_command(TARGET jed POST_BUILD
    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/Help.txt" "$<TARGET_FILE_DIR:jed>/Help.txt")

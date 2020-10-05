@@ -2710,7 +2710,7 @@ std::optional<app_state> load(app_state state, const std::wstring& command, sett
     folder.push_back('/');
 
   std::string cmd = jtk::convert_wstring_to_string(command);
-  if (!cmd.empty() && cmd.front() == '/')
+  while (!cmd.empty() && cmd.front() == '/')
     cmd.erase(cmd.begin());
   if (!cmd.empty() && cmd.front() == '"')
     cmd.erase(cmd.begin());
@@ -3606,10 +3606,15 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 
   state.wt = wt_normal;  
 
-  if (argc > 1)
+  //if (argc > 1)
+  for (int j = 1; j < argc; ++j)
     {
-    std::string input(argv[1]);
+    std::string input(argv[j]);
 
+    if (input[0] == '-') // option
+      {
+      continue;
+      }
     if (input[0] == '=') // piped
       {
       state.wt = wt_piped;
@@ -3621,8 +3626,11 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
       {
       state.wt = wt_normal;
       auto inputfolder = jtk::get_cwd();
-      if (inputfolder.back() != '\\' && inputfolder.back() != '/' && input.front() != '/')
+      //if (inputfolder.back() != '\\' && inputfolder.back() != '/' && input.front() != '/')
+      if (!inputfolder.empty() && inputfolder.back() != '/')
         inputfolder.push_back('/');
+      if (input.front() == '/')
+        inputfolder.pop_back();
       inputfolder.append(input);
       if (jtk::is_directory(inputfolder))
         input.swap(inputfolder);
@@ -3644,17 +3652,23 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
         {
         state.buffer = make_empty_buffer();
         state = start_pipe(state, inputfile, argc, argv, s);
+        j = argc;
         }
       else
         state.buffer = read_from_file(inputfile);
       }
     }
-  //else if (s.last_active_folder.empty())
-  //  state.buffer = make_empty_buffer();
+  
+  if (state.buffer.name.empty())
+    {
+    if (s.last_active_folder.empty())
+      state.buffer = make_empty_buffer();
+    else
+      state.buffer = read_from_file(s.last_active_folder);
+    }
+    
   //else
-  //  state.buffer = read_from_file(s.last_active_folder);
-  else
-    state.buffer = read_from_file(jtk::get_cwd());
+  //  state.buffer = read_from_file(jtk::get_cwd());
   state.buffer = set_multiline_comments(state.buffer);
   state.buffer = init_lexer_status(state.buffer);
   state.command_buffer = insert(make_empty_buffer(), s.command_text, convert(s), false);
