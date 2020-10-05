@@ -90,6 +90,7 @@ app_state clear_operation_buffer(app_state state);
 app_state check_pipes(bool& modifications, app_state state, const settings& s);
 std::optional<app_state> execute(app_state state, const std::wstring& command, settings& s);
 std::optional<app_state> command_kill(app_state state, settings& s);
+app_state start_pipe(app_state state, const std::string& inputfile, const std::vector<std::string>& parameters, settings& s);
 
 app_state resize_font(app_state state, int font_size, settings& s)
   {
@@ -2032,6 +2033,7 @@ std::optional<app_state> command_kill(app_state state, settings& s)
   if (state.wt == wt_piped)
     {
     destroy_pipe(state.process.data(), 9);
+    state.process[0] = state.process[1] = state.process[2] = 0;
     state.wt = wt_normal;
     }
 #endif
@@ -2529,7 +2531,7 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
   std::wstring cmd_id, cmd_remainder;
   split_command(cmd_id, cmd_remainder, command);
   char pipe_cmd = cmd_id[0];
-  if (pipe_cmd == '!' || pipe_cmd == '<' || pipe_cmd == '>' || pipe_cmd == '|')
+  if (pipe_cmd == '!' || pipe_cmd == '<' || pipe_cmd == '>' || pipe_cmd == '|' || pipe_cmd == '=')
     {
     cmd_id.erase(cmd_id.begin());
     }
@@ -2579,7 +2581,8 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
     return execute_external_input(state, file_path, parameters, s);
   else if (pipe_cmd == '>')
     return execute_external_output(state, file_path, parameters, s);
-
+  else if (pipe_cmd == '=')
+    return start_pipe(state, file_path, parameters, s);
   return state;
   }
 
@@ -3101,15 +3104,14 @@ std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, se
   return state;
   }
 
-app_state start_pipe(app_state state, const std::string& inputfile, int argc, char** orig_argv, const settings& s)
+app_state start_pipe(app_state state, const std::string& inputfile, const std::vector<std::string>& parameters, settings& s)
   {
-  state.buffer = make_empty_buffer();
+  state = *command_kill(state, s);
+  //state.buffer = make_empty_buffer();
   state.buffer.name = "+" + inputfile;
   state.scroll_row = 0;
-  state.operation = op_editing;
-  std::vector<std::string> parameters;
-  for (int j = 2; j < argc; ++j)
-    parameters.emplace_back(orig_argv[j]);
+  state.operation = op_editing;  
+  state.wt = wt_piped;
 
   char** argv = alloc_arguments(inputfile, parameters);
 #ifdef _WIN32
@@ -3144,6 +3146,14 @@ app_state start_pipe(app_state state, const std::string& inputfile, int argc, ch
     state.piped_prompt = std::wstring(last_line.begin(), last_line.end());
     }
   return state;
+  }
+
+app_state start_pipe(app_state state, const std::string& inputfile, int argc, char** argv, settings& s)
+  { 
+  std::vector<std::string> parameters;
+  for (int j = 2; j < argc; ++j)
+    parameters.emplace_back(argv[j]);
+  return start_pipe(state, inputfile, parameters, s);
   }
 
 app_state check_pipes(bool& modifications, app_state state, const settings& s)
@@ -3576,6 +3586,12 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   state.w = s.w * font_width;
   state.h = s.h * font_height;
 
+#ifdef _WIN32
+  state.process = nullptr;
+#else
+  state.process[0] = state.process[1] = state.process[2] = 0;
+#endif
+
   nodelay(stdscr, TRUE);
   noecho();
 
@@ -3621,7 +3637,10 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
         inputfile.append(input);
         }
       if (state.wt == wt_piped)
+        {
+        state.buffer = make_empty_buffer();
         state = start_pipe(state, inputfile, argc, argv, s);
+        }
       else
         state.buffer = read_from_file(inputfile);
       }
