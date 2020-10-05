@@ -129,7 +129,7 @@ bool is_modified(const app_state& state)
     {
     if (state.buffer.name.empty())
       return false;
-    if (state.buffer.name[0] == '+')
+    if (state.buffer.name[0] == '=')
       return false;
     }
   return ((state.buffer.modification_mask & 1) == 1);
@@ -244,7 +244,7 @@ void draw_title_bar(app_state state)
   std::wstring filename = L"file: ";
   if (!state.buffer.name.empty() && state.buffer.name.back() == '/')
     filename = L"folder: ";
-  if (state.wt == wt_piped && !state.buffer.name.empty() && state.buffer.name[0] == '+')
+  if (state.wt == wt_piped && !state.buffer.name.empty() && state.buffer.name[0] == '=')
     filename = L"pipe: ";
   filename.append((state.buffer.name.empty() ? std::wstring(L"<noname>") : jtk::convert_string_to_wstring(state.buffer.name)));
   write_center(title_bar, filename);
@@ -1418,7 +1418,7 @@ app_state ret_editor(app_state state, const settings& s)
   else
     {
     std::string indentation("\n");
-    indentation.append(get_row_indentation_pattern(state.buffer, state.buffer.pos.row));
+    indentation.append(get_row_indentation_pattern(state.buffer, state.buffer.pos));
     return text_input(state, indentation.c_str(), s);
     }
   }
@@ -1426,7 +1426,7 @@ app_state ret_editor(app_state state, const settings& s)
 app_state ret_command(app_state state, const settings& s)
   {
   std::string indentation("\n");
-  indentation.append(get_row_indentation_pattern(state.command_buffer, state.command_buffer.pos.row));  
+  indentation.append(get_row_indentation_pattern(state.command_buffer, state.command_buffer.pos));
   return text_input(state, indentation.c_str(), s);
   }
 
@@ -2038,7 +2038,7 @@ std::optional<app_state> command_kill(app_state state, settings& s)
     state.wt = wt_normal;
     }
 #endif
-  if (!state.buffer.name.empty() && state.buffer.name[0] == '+')
+  if (!state.buffer.name.empty() && state.buffer.name[0] == '=')
     state.buffer.name.clear();
   return state;
   }
@@ -2948,7 +2948,7 @@ std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, b
     if (!keyb_data.selecting)
       {
       state.buffer.start_selection = mouse.left_drag_start.pos;
-      state.buffer.rectangular_selection = false;
+      state.buffer.rectangular_selection = (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
       }
     state.buffer = update_position(state.buffer, mouse.left_drag_start.pos, convert(s));
     //state.command_buffer = clear_selection(state.command_buffer);
@@ -2960,7 +2960,7 @@ std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, b
     if (!keyb_data.selecting)
       {
       state.command_buffer.start_selection = mouse.left_drag_start.pos;
-      state.command_buffer.rectangular_selection = false;
+      state.command_buffer.rectangular_selection = (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
       }
     state.command_buffer = update_position(state.command_buffer, mouse.left_drag_start.pos, convert(s));
     //state.buffer = clear_selection(state.buffer);
@@ -3118,7 +3118,7 @@ app_state start_pipe(app_state state, const std::string& inputfile, const std::v
   {
   state = *command_kill(state, s);
   //state.buffer = make_empty_buffer();
-  state.buffer.name = "+" + inputfile;
+  state.buffer.name = "=" + inputfile;
   state.scroll_row = 0;
   state.operation = op_editing;  
   state.wt = wt_piped;
@@ -3244,6 +3244,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           case SDLK_HOME: return move_home(state, s);
           case SDLK_END: return move_end(state, s);
           case SDLK_TAB: return s.use_spaces_for_tab ? spaced_tab(state, s.tab_space, s) : tab(state, s);
+          case SDLK_KP_ENTER:
           case SDLK_RETURN: return ret(state, s);
           case SDLK_BACKSPACE: return backspace(state, s);
           case SDLK_DELETE: 
@@ -3280,12 +3281,20 @@ std::optional<app_state> process_input(app_state state, settings& s)
           if (state.operation == op_editing)
             {
             if (state.buffer.start_selection == std::nullopt)
+              {
               state.buffer.start_selection = get_actual_position(state.buffer);
+              if (!state.buffer.rectangular_selection)
+                state.buffer.rectangular_selection = (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
+              }
             }
           else if (state.operation == op_command_editing)
             {
             if (state.command_buffer.start_selection == std::nullopt)
+              {
               state.command_buffer.start_selection = get_actual_position(state.command_buffer);
+              if (!state.command_buffer.rectangular_selection)
+                state.command_buffer.rectangular_selection = (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
+              }
             }
           else
             {
@@ -3671,6 +3680,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
     std::string cwd = jtk::get_cwd();
     if (!cwd.empty() && cwd.back() != '/')
       cwd.push_back('/');
+    /*
     std::string exe_dir = jtk::get_folder(jtk::get_executable_path());
     if (exe_dir == cwd)
       {
@@ -3679,8 +3689,8 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
       else
         state.buffer = read_from_file(s.last_active_folder);
       }
-    else
-      state.buffer = read_from_file(cwd);
+    else*/
+    state.buffer = read_from_file(cwd);
     }
     
   //else
