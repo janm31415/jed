@@ -87,6 +87,9 @@ const keyword_data& get_keywords(const std::string& name)
   }
 
 app_state clear_operation_buffer(app_state state);
+app_state check_pipes(bool& modifications, app_state state, const settings& s);
+std::optional<app_state> execute(app_state state, const std::wstring& command, settings& s);
+std::optional<app_state> command_kill(app_state state, settings& s);
 
 app_state resize_font(app_state state, int font_size, settings& s)
   {
@@ -117,6 +120,18 @@ app_state resize_font(app_state state, int font_size, settings& s)
   resize_term_ex(state.h / font_height, state.w / font_width);
 
   return state;
+  }
+
+bool is_modified(const app_state& state)
+  {
+  if (state.wt != wt_normal)
+    {
+    if (state.buffer.name.empty())
+      return false;
+    if (state.buffer.name[0] == '+')
+      return false;
+    }
+  return ((state.buffer.modification_mask & 1) == 1);
   }
 
 void get_editor_window_size(int& rows, int& cols, const settings& s)
@@ -228,10 +243,12 @@ void draw_title_bar(app_state state)
   std::wstring filename = L"file: ";
   if (!state.buffer.name.empty() && state.buffer.name.back() == '/')
     filename = L"folder: ";
+  if (state.wt == wt_piped && !state.buffer.name.empty() && state.buffer.name[0] == '+')
+    filename = L"pipe: ";
   filename.append((state.buffer.name.empty() ? std::wstring(L"<noname>") : jtk::convert_string_to_wstring(state.buffer.name)));
   write_center(title_bar, filename);
 
-  if ((state.buffer.modification_mask & 1) == 1)
+  if (is_modified(state))
     write_right(title_bar, L" Modified ");
 
   for (int i = 0; i < cols; ++i)
@@ -1372,8 +1389,6 @@ app_state del(app_state state, const settings& s)
     return del_operation(state, s);
   }
 
-app_state check_pipes(bool& modifications, app_state state, const settings& s);
-
 app_state ret_editor(app_state state, const settings& s)
   {
   if (state.wt == wt_piped && state.buffer.pos.row == (int64_t)state.buffer.content.size() - 1)
@@ -1529,8 +1544,10 @@ app_state save_file(app_state state)
   return state;
   }
 
-app_state make_new_buffer(app_state state)
+app_state make_new_buffer(app_state state, settings& s)
   {
+  state = *command_kill(state, s);
+  state.wt = wt_normal;
   state.buffer = make_empty_buffer();
   state.scroll_row = 0;
   state.message = string_to_line("[New]");
@@ -1643,6 +1660,11 @@ app_state gotoline(app_state state, const settings& s)
         else
           state.buffer.pos.row = state.buffer.content.size() - 1;
         }
+      if (!state.buffer.content.empty())
+        {
+        state.buffer.start_selection = state.buffer.pos;
+        state.buffer = move_end(state.buffer, convert(s));
+        }
       }
     }
   state.operation = op_editing;
@@ -1665,7 +1687,7 @@ std::optional<app_state> ret_operation(app_state state, settings& s)
       case op_query_save: state = save_file(state); break;
       case op_from_find_to_replace: state = make_replace_buffer(state, s); break;
       case op_replace: state = replace(state, s); break;
-      case op_new: state = make_new_buffer(state); break;
+      case op_new: state = make_new_buffer(state, s); break;
       case op_get: state = get(state); break;
       case op_exit: return std::nullopt;
       default: break;
@@ -1730,27 +1752,27 @@ std::optional<app_state> make_goto_buffer(app_state state, const settings& s)
   std::stringstream str;
   str << state.buffer.pos.row + 1;
   state.operation_buffer = insert(state.operation_buffer, str.str(), convert(s), false);
+  state.operation_buffer.start_selection = position(0, 0);
+  state.operation_buffer = move_end(state.operation_buffer, convert(s));
   return state;
   }
 
 std::optional<app_state> command_new(app_state state, settings& s)
   {
-  if ((state.buffer.modification_mask & 1) == 1)
+  if (is_modified(state))
     {
     state.operation = op_query_save;
     state.operation_stack.push_back(op_new);
     return make_save_buffer(state, s);
     }
-  return make_new_buffer(state);
+  return make_new_buffer(state, s);
   }
 
 std::optional<app_state> command_exit(app_state state, settings& s)
   {
   state.operation = op_editing;
-  if ((state.buffer.modification_mask & 1) == 1)
+  if (is_modified(state))
     {
-    if (state.wt != wt_normal && state.buffer.name.empty())
-      return std::nullopt;
     state.operation = op_query_save;
     state.operation_stack.push_back(op_exit);
     return make_save_buffer(state, s);
@@ -1996,6 +2018,26 @@ std::optional<app_state> command_put(app_state state, settings& s)
   return state;
   }
 
+
+std::optional<app_state> command_kill(app_state state, settings& s)
+  {
+#ifdef _WIN32
+  if (state.wt == wt_piped)
+    {
+    destroy_pipe(state.process, 9);
+    state.process = nullptr;
+    state.wt = wt_normal;
+    }
+#else
+  if (state.wt == wt_piped)
+    {
+    destroy_pipe(state.process.data(), 9);
+    state.wt = wt_normal;
+    }
+#endif
+  return state;
+  }
+
 std::optional<app_state> command_save(app_state state, settings& s)
   {
   if (state.buffer.name.empty())
@@ -2169,7 +2211,7 @@ std::optional<app_state> command_light_theme(app_state state, settings& s)
 
 std::optional<app_state> command_get(app_state state, settings& s)
   {
-  if ((state.buffer.modification_mask & 1) == 1)
+  if (is_modified(state))
     {
     state.operation = op_query_save;
     state.operation_stack.push_back(op_get);
@@ -2202,15 +2244,34 @@ std::optional<app_state> command_tab_8(app_state state, settings& s)
   return state;
   }
 
+std::optional<app_state> command_tab(app_state state, std::wstring& sz, settings& s)
+  {
+  int save_tab_space = s.tab_space;
+  std::wstringstream str;
+  str << sz;
+  str >> s.tab_space;
+  if (s.tab_space < 0 || s.tab_space > 100)
+    s.tab_space = save_tab_space;
+  return state;
+  }
+
 std::optional<app_state> command_tab_spaces(app_state state, settings& s)
   {
   s.use_spaces_for_tab = !s.use_spaces_for_tab;
   return state;
   }
 
-std::optional<app_state> command_piped_win(app_state state, settings& s)
+std::optional<app_state> command_piped_win(app_state state,  std::wstring& parameters, settings& s)
   {
-  return state;
+  remove_whitespace(parameters);
+  write_settings(s, get_file_in_executable_path("jed_settings.json").c_str());
+  std::string exepath = jtk::get_executable_path();
+  exepath.insert(exepath.begin(), '"');
+  exepath.push_back('"');
+  exepath.push_back(' ');
+  exepath.push_back('=');
+  exepath.append(jtk::convert_wstring_to_string(parameters));
+  return execute(state, jtk::convert_string_to_wstring(exepath), s);  
   }
 
 const auto executable_commands = std::map<std::wstring, std::function<std::optional<app_state>(app_state, settings&)>>
@@ -2226,6 +2287,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Get", command_get},
   {L"Goto", command_goto},
   {L"Help", command_help},
+  {L"Kill", command_kill},
   {L"LightTheme", command_light_theme},
   {L"MatrixTheme", command_matrix_theme},
   {L"New", command_new},
@@ -2240,10 +2302,15 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"TabSpaces", command_tab_spaces},
   {L"Tab2", command_tab_2},
   {L"Tab4", command_tab_4},
-  {L"Tab8", command_tab_8},
-  {L"Win", command_piped_win},
+  {L"Tab8", command_tab_8},  
   {L"Undo", command_undo},
   {L"Yes", command_yes}
+  };
+
+const auto executable_commands_with_parameters = std::map<std::wstring, std::function<std::optional<app_state>(app_state, std::wstring&, settings&)>>
+  {
+  {L"Tab", command_tab},
+  {L"Win", command_piped_win}
   };
 
 void split_command(std::wstring& first, std::wstring& remainder, const std::wstring& command)
@@ -2470,6 +2537,12 @@ std::optional<app_state> execute(app_state state, const std::wstring& command, s
     pipe_cmd = '!';
   remove_whitespace(cmd_id);
   remove_quotes(cmd_id);
+
+  auto it2 = executable_commands_with_parameters.find(cmd_id);
+  if (it2 != executable_commands_with_parameters.end())
+    {
+    return it2->second(state, cmd_remainder, s);
+    }
 
   auto file_path = get_file_path(jtk::convert_wstring_to_string(cmd_id), state.buffer.name);
 
@@ -2813,15 +2886,28 @@ std::optional<app_state> select_word(app_state state, int x, int y, const settin
     }
   if (selection.first >= 0 && selection.second >= 0)
     {
-    state.buffer.start_selection->row = p.pos.row;
-    state.buffer.start_selection->col = selection.first;
-    state.buffer.pos.row = p.pos.row;
-    state.buffer.pos.col = selection.second;
+    if (p.type == SET_TEXT_EDITOR)
+      {
+      state.buffer.start_selection->row = p.pos.row;
+      state.buffer.start_selection->col = selection.first;
+      state.buffer.pos.row = p.pos.row;
+      state.buffer.pos.col = selection.second;
+      }
+    else if (p.type == SET_TEXT_COMMAND)
+      {
+      state.command_buffer.start_selection->row = p.pos.row;
+      state.command_buffer.start_selection->col = selection.first;
+      state.command_buffer.pos.row = p.pos.row;
+      state.command_buffer.pos.col = selection.second;
+      }
     }
   else
     {
     p = find_mouse_text_pick(x, y);
-    state.buffer = update_position(state.buffer, p.pos, convert(s));
+    if (p.type == SET_TEXT_EDITOR)
+      state.buffer = update_position(state.buffer, p.pos, convert(s));
+    else if (p.type == SET_TEXT_COMMAND)
+      state.command_buffer = update_position(state.command_buffer, p.pos, convert(s));
     }
   return state;
   }
@@ -3018,6 +3104,7 @@ std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, se
 app_state start_pipe(app_state state, const std::string& inputfile, int argc, char** orig_argv, const settings& s)
   {
   state.buffer = make_empty_buffer();
+  state.buffer.name = "+" + inputfile;
   state.scroll_row = 0;
   state.operation = op_editing;
   std::vector<std::string> parameters;
@@ -3584,13 +3671,7 @@ void engine::run()
     SDL_UpdateWindowSurface(pdc_window);
     }
 
-#ifdef _WIN32
-  if (state.wt == wt_piped)
-    destroy_pipe(state.process, 9);
-#else
-  if (state.wt == wt_piped)
-    destroy_pipe(state.process.data(), 9);
-#endif
+  state = *command_kill(state, s);
 
   s.w = state.w / font_width;
   s.h = state.h / font_height;
