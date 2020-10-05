@@ -91,6 +91,8 @@ app_state check_pipes(bool& modifications, app_state state, const settings& s);
 std::optional<app_state> execute(app_state state, const std::wstring& command, settings& s);
 std::optional<app_state> command_kill(app_state state, settings& s);
 app_state start_pipe(app_state state, const std::string& inputfile, const std::vector<std::string>& parameters, settings& s);
+char** alloc_arguments(const std::string& path, const std::vector<std::string>& parameters);
+void free_arguments(char** argv);
 
 app_state resize_font(app_state state, int font_size, settings& s)
   {
@@ -1830,6 +1832,25 @@ std::optional<app_state> command_redo(app_state state, settings& s)
     state.operation_buffer = redo(state.operation_buffer, convert(s));
   return check_scroll_position(state, s);
   }
+  
+#ifndef _WIN32
+std::string pbpaste()
+{
+  FILE* pipe = popen("pbpaste", "r");
+  if (!pipe) return "ERROR";
+  char buffer[128];
+  std::string result = "";
+  while(!feof(pipe))
+  {
+    if(fgets(buffer, 128, pipe) != NULL)
+    {
+      result += buffer;
+    }
+  }
+  pclose(pipe);
+  return result;
+}
+#endif
 
 std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings& s)
   {
@@ -1841,13 +1862,23 @@ std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings&
     state.snarf_buffer = get_selection(state.operation_buffer, convert(s));
   state.message = string_to_line("[Copy]");
 #ifdef _WIN32
-  std::wstring txt;
-  for (const auto& ln : state.snarf_buffer)
-    {
-    for (const auto& ch : ln)
-      txt.push_back(ch);
-    }
+  std::wstring txt = to_wstring(state.snarf_buffer);
   copy_to_windows_clipboard(jtk::convert_wstring_to_string(txt));
+#else
+  std::string txt = to_string(state.snarf_buffer);
+  int pipefd[3];
+  std::string pbcopy = get_file_path("pbcopy", "");
+  char** argv = alloc_arguments(pbcopy, std::vector<std::string>());
+  int err = create_pipe(pbcopy.c_str(), argv, nullptr, pipefd);
+  free_arguments(argv);
+  if (err != 0)
+    {
+    std::string error_message = "Could not create child process";
+    state.message = string_to_line(error_message);
+    return state;
+    }
+  send_to_pipe(pipefd, txt.c_str());
+  close_pipe(pipefd);
 #endif
   return state;
   }
@@ -1855,7 +1886,7 @@ std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings&
 std::optional<app_state> command_paste_from_snarf_buffer(app_state state, settings& s)
   {
   state.message = string_to_line("[Paste]");
-#ifdef _WIN32
+#if defined(_WIN32)
   auto txt = get_text_from_windows_clipboard();
   if (state.operation == op_editing)
     {
@@ -1870,18 +1901,19 @@ std::optional<app_state> command_paste_from_snarf_buffer(app_state state, settin
   else
     state.operation_buffer = insert(state.operation_buffer, txt, convert(s));
 #else
+  std::string txt = pbpaste();
   if (state.operation == op_editing)
     {
-    state.buffer = insert(state.buffer, state.snarf_buffer, convert(s));
+    state.buffer = insert(state.buffer, txt, convert(s));
     return check_scroll_position(state, s);
     }
   else if (state.operation == op_command_editing)
     {
-    state.command_buffer = insert(state.command_buffer, state.snarf_buffer, convert(s));
+    state.command_buffer = insert(state.command_buffer, txt, convert(s));
     return check_command_scroll_position(state, s);
     }
   else
-    state.operation_buffer = insert(state.operation_buffer, state.snarf_buffer, convert(s));
+    state.operation_buffer = insert(state.operation_buffer, txt, convert(s));
 #endif  
   return state;
   }
@@ -2418,9 +2450,9 @@ app_state execute_external_input(app_state state, const std::string& file_path, 
   state.buffer = insert(state.buffer, text, convert(s));
 
 #ifdef _WIN32        
-  destroy_pipe(process, 10);
+  close_pipe(process);
 #else
-  destroy_pipe(pipefd, 10);
+  close_pipe(pipefd);
 #endif
   return state;
   }
@@ -2452,7 +2484,7 @@ app_state execute_external_output(app_state state, const std::string& file_path,
     state.message = string_to_line(std::string("Error writing to external process"));
     return state;
     }
-  destroy_pipe(process, 10);
+  close_pipe(process);
 #else
   int pipefd[3];
   int err = create_pipe(file_path.c_str(), argv, nullptr, pipefd);
@@ -2464,7 +2496,7 @@ app_state execute_external_output(app_state state, const std::string& file_path,
     return state;
     }
   send_to_pipe(pipefd, output.c_str());
-  destroy_pipe(pipefd, 10);
+  close_pipe(pipefd);
 #endif
 
   return state;
@@ -2516,9 +2548,9 @@ app_state execute_external_input_output(app_state state, const std::string& file
   state.buffer = insert(state.buffer, text, convert(s));
 
 #ifdef _WIN32        
-  destroy_pipe(process, 10);
+  close_pipe(process);
 #else
-  destroy_pipe(pipefd, 10);
+  close_pipe(pipefd);
 #endif
   return state;
   }

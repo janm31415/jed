@@ -173,6 +173,33 @@ inline int create_pipe(const char *path, char * const * argv, const char* curren
 
   return NO_ERROR;
   }
+  
+inline void close_pipe(void* pr)
+  {
+  pipe_process *cp;
+  int result;
+
+  cp = (pipe_process *)pr;
+  if (cp == nullptr)
+    return;
+
+
+  /* TerminateProcess is considered harmful, so... */
+  CloseHandle(cp->hTo); /* Closing this will give the child an EOF and hopefully kill it */
+  if (cp->hFrom) CloseHandle(cp->hFrom);  /* if NULL, InputThread will close it */
+                                          /* The following doesn't work because the chess program
+                                          doesn't "have the same console" as WinBoard.  Maybe
+                                          we could arrange for this even though neither WinBoard
+                                          nor the chess program uses a console for stdio? */
+                                          /*!!if (signal) GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, cp->pid);*/
+
+                                          /* [AS] Special termination modes for misbehaving programs... */
+
+
+  CloseHandle(cp->hProcess);
+
+  free(cp);
+  }
 
 inline void destroy_pipe(void* pr, int signal)
   {
@@ -339,6 +366,15 @@ inline int create_pipe(const char *path, char* const* argv, const char* current_
   pipefd[2] = pid;
 
   return 0;
+  }
+  
+inline void close_pipe(int* pipefd)
+  {
+  if (pipefd[2]>= 0)
+    {
+    close(pipefd[0]);
+    close(pipefd[1]);
+    }
   }
 
 inline void destroy_pipe(int* pipefd, int)
