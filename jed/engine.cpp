@@ -2656,12 +2656,19 @@ std::string compose_folder_from_split(const std::vector<std::string>& split)
     }
   return out;
   }
+  
 
-std::optional<app_state> load_folder(app_state state, const std::string& folder, settings& s)
-  {
+std::string simplify_folder(const std::string& folder)
+  {  
   auto split = split_folder(folder);
   split = simplify_split_folder(split);
   std::string simplified_folder_name = compose_folder_from_split(split);
+  return simplified_folder_name;
+  }
+
+std::optional<app_state> load_folder(app_state state, const std::string& folder, settings& s)
+  {
+  std::string simplified_folder_name = simplify_folder(folder);
   if (simplified_folder_name.empty())
     {
     std::string error_message = "Invalid folder";
@@ -3634,6 +3641,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
       inputfolder.append(input);
       if (jtk::is_directory(inputfolder))
         input.swap(inputfolder);
+      input = simplify_folder(input);
 
       state.buffer = read_from_file(input);
       }
