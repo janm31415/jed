@@ -25,8 +25,7 @@ enum e_operation
 enum e_window_type
   {
   wt_normal,
-  wt_piped,
-  wt_terminal
+  wt_piped
   };
 
 struct app_state

@@ -3665,14 +3665,22 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
       else
         state.buffer = read_from_file(inputfile);
       }
-    }
-  
+    }  
   if (state.buffer.name.empty())
     {
-    if (s.last_active_folder.empty())
-      state.buffer = make_empty_buffer();
+    std::string cwd = jtk::get_cwd();
+    if (!cwd.empty() && cwd.back() != '/')
+      cwd.push_back('/');
+    std::string exe_dir = jtk::get_folder(jtk::get_executable_path());
+    if (exe_dir == cwd)
+      {
+      if (s.last_active_folder.empty())
+        state.buffer = make_empty_buffer();
+      else
+        state.buffer = read_from_file(s.last_active_folder);
+      }
     else
-      state.buffer = read_from_file(s.last_active_folder);
+      state.buffer = read_from_file(cwd);
     }
     
   //else
