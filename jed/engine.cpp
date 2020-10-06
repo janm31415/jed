@@ -2640,7 +2640,10 @@ std::optional<app_state> load_file(app_state state, const std::string& filename,
   exepath.push_back('"');
   exepath.push_back(' ');
   exepath.push_back('"');
-  exepath.append(filename);
+  std::string fn(filename);
+  if (!fn.empty() && (fn.back() == '\\' || fn.back() == '/')) // escape character gives problems in combination with "
+    fn.pop_back();
+  exepath.append(fn);
   exepath.push_back('"');
   return execute(state, jtk::convert_string_to_wstring(exepath), s);
   }
