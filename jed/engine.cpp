@@ -94,6 +94,25 @@ app_state start_pipe(app_state state, const std::string& inputfile, const std::v
 char** alloc_arguments(const std::string& path, const std::vector<std::string>& parameters);
 void free_arguments(char** argv);
 
+bool ctrl_pressed()
+  {
+#if defined(__APPLE__)
+  if (keyb.is_down(SDLK_LGUI) || keyb.is_down(SDLK_RGUI))
+    return true;
+#endif
+  return (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL));
+  }
+  
+bool alt_pressed()
+  {
+  return (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
+  }
+  
+bool shift_pressed()
+  {
+  return (keyb.is_down(SDLK_LSHIFT) || keyb.is_down(SDLK_RSHIFT));
+  }
+
 app_state resize_font(app_state state, int font_size, settings& s)
   {
   pdc_font_size = font_size;
@@ -1981,12 +2000,7 @@ std::wstring find_command(file_buffer fb, position pos, const settings& s)
   if (has_nontrivial_selection(fb, senv) && in_selection(fb, pos, cursor, fb.pos, fb.start_selection, fb.rectangular_selection, senv))
     {
     auto txt = get_selection(fb, senv);
-    std::wstring out;
-    for (auto line : txt)
-      {
-      for (auto ch : line)
-        out.push_back(ch);
-      }
+    std::wstring out = to_wstring(txt);
     return clean_command(out);
     }
   if (fb.content.size() <= pos.row)
@@ -2994,7 +3008,7 @@ std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, b
     if (!keyb_data.selecting)
       {
       state.buffer.start_selection = mouse.left_drag_start.pos;
-      state.buffer.rectangular_selection = (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
+      state.buffer.rectangular_selection = alt_pressed();
       }
     state.buffer = update_position(state.buffer, mouse.left_drag_start.pos, convert(s));
     //state.command_buffer = clear_selection(state.command_buffer);
@@ -3006,7 +3020,7 @@ std::optional<app_state> left_mouse_button_down(app_state state, int x, int y, b
     if (!keyb_data.selecting)
       {
       state.command_buffer.start_selection = mouse.left_drag_start.pos;
-      state.command_buffer.rectangular_selection = (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
+      state.command_buffer.rectangular_selection = alt_pressed();
       }
     state.command_buffer = update_position(state.command_buffer, mouse.left_drag_start.pos, convert(s));
     //state.buffer = clear_selection(state.buffer);
@@ -3295,7 +3309,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           case SDLK_BACKSPACE: return backspace(state, s);
           case SDLK_DELETE: 
           {
-          if (keyb.is_down(SDLK_LSHIFT) || keyb.is_down(SDLK_RSHIFT)) // copy
+          if (shift_pressed()) // copy
             {
             state = *command_copy_to_snarf_buffer(state, s); 
             }
@@ -3330,7 +3344,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
               {
               state.buffer.start_selection = get_actual_position(state.buffer);
               if (!state.buffer.rectangular_selection)
-                state.buffer.rectangular_selection = (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
+                state.buffer.rectangular_selection = alt_pressed();
               }
             }
           else if (state.operation == op_command_editing)
@@ -3339,7 +3353,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
               {
               state.command_buffer.start_selection = get_actual_position(state.command_buffer);
               if (!state.command_buffer.rectangular_selection)
-                state.command_buffer.rectangular_selection = (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
+                state.command_buffer.rectangular_selection = alt_pressed();
               }
             }
           else
@@ -3353,7 +3367,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           case SDLK_PLUS:
           case SDLK_EQUALS:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             ++s.command_buffer_rows;
             int rows, cols;
@@ -3367,7 +3381,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           case SDLK_KP_MINUS:
           case SDLK_MINUS:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             --s.command_buffer_rows;
             if (s.command_buffer_rows < 0)
@@ -3382,7 +3396,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_F3:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             auto fb = state.operation == op_editing ? state.buffer : (state.operation == op_command_editing ? state.command_buffer : state.operation_buffer);
             if (has_selection(fb))
@@ -3398,7 +3412,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_a:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             switch (state.operation)
               {
@@ -3410,7 +3424,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_c:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_copy_to_snarf_buffer(state, s);
             }
@@ -3418,7 +3432,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_f:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_find(state, s);
             }
@@ -3426,7 +3440,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_g:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_goto(state, s);
             }
@@ -3434,7 +3448,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_h:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_replace(state, s);
             }
@@ -3442,7 +3456,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_n:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             switch (state.operation)
               {
@@ -3457,7 +3471,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_o:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_open(state, s);
             }
@@ -3465,7 +3479,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_s:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_save(state, s);
             }
@@ -3473,7 +3487,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_v:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_paste_from_snarf_buffer(state, s);
             }
@@ -3481,7 +3495,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_w:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_save_as(state, s);
             }
@@ -3489,7 +3503,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_x:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_cancel(state, s);
             }
@@ -3497,7 +3511,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_y:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             switch (state.operation)
               {
@@ -3509,7 +3523,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
           }
           case SDLK_z:
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             return command_undo(state, s);
             }
@@ -3557,7 +3571,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
         bool double_click = event.button.clicks > 1;
         if (event.button.button == 1)
           {
-          if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+          if (ctrl_pressed())
             {
             mouse.left_button_down = false;
             mouse.right_button_down = false;
@@ -3591,7 +3605,7 @@ std::optional<app_state> process_input(app_state state, settings& s)
         }
         case SDL_MOUSEWHEEL:
         {
-        if (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL))
+        if (ctrl_pressed())
           {
           if (event.wheel.y > 0)
             ++pdc_font_size;
