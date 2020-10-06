@@ -3720,24 +3720,16 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
     }  
   if (state.buffer.name.empty())
     {
-    std::string cwd = jtk::get_cwd();
-    if (!cwd.empty() && cwd.back() != '/')
-      cwd.push_back('/');
-    /*
-    std::string exe_dir = jtk::get_folder(jtk::get_executable_path());
-    if (exe_dir == cwd)
+    if (!s.startup_folder.empty())
+      state.buffer = read_from_file(s.startup_folder);
+    else
       {
-      if (s.last_active_folder.empty())
-        state.buffer = make_empty_buffer();
-      else
-        state.buffer = read_from_file(s.last_active_folder);
+      std::string cwd = jtk::get_cwd();
+      if (!cwd.empty() && cwd.back() != '/')
+        cwd.push_back('/');
+      state.buffer = read_from_file(cwd);
       }
-    else*/
-    state.buffer = read_from_file(cwd);
     }
-    
-  //else
-  //  state.buffer = read_from_file(jtk::get_cwd());
   state.buffer = set_multiline_comments(state.buffer);
   state.buffer = init_lexer_status(state.buffer);
   state.command_buffer = insert(make_empty_buffer(), s.command_text, convert(s), false);
@@ -3783,5 +3775,4 @@ void engine::run()
   s.h = state.h / font_height;
   SDL_GetWindowPosition(pdc_window, &s.x, &s.y);
   s.command_text = buffer_to_string(state.command_buffer);
-  s.last_active_folder = jtk::get_folder(state.buffer.name);
   }
