@@ -1,10 +1,10 @@
-# jed
+# Jed
 
 Jan's editor: a minimalist text editor inspired by Acme and Nano.
 
-building
+Building
 --------
-### building instructions for Windows
+### Building instructions for Windows
 
 1.) Download and build [SDL2](https://www.libsdl.org/) (and install in C:\program files\sdl2 or any other location but then you'll need to update the CMakeLists.txt files with this new location)
 
@@ -18,7 +18,7 @@ building
 
 6.) Use CMake to make a Visual Studio solution file for this project and build.
 
-### building instructions for Linux
+### Building instructions for Linux
 
 1.) Install SDL2: `sudo apt-get install libsdl2-dev`
 
@@ -26,7 +26,7 @@ building
 
 3.) Use CMake to generate a makefile, and run make in the build folder.
 
-### building instructions for MacOs
+### Building instructions for MacOs
 
 1.) Download the SDL2 framework from the [SDL2](https://www.libsdl.org/) website and install in /Library/Frameworks/
 
@@ -34,7 +34,7 @@ building
 
 3.) Use CMake to generate a XCode project and build.
 
-jed basics
+Jed basics
 ----------
 Jed is a minimalist text editor based on the text editor Acme by Rob Pike, 
 and on the text editor Nano that is installed by default in Ubuntu and
@@ -141,6 +141,6 @@ for "startup_folder" so that jed (without arguments) always starts in this
 given folder.
 
 
-jed screenshot
+Jed screenshot
 --------------
 ![](images/jed.png)
