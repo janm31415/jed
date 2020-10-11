@@ -143,5 +143,5 @@ given folder.
 
 Jed screenshot
 --------------
-The screenshot shows two instances of Jed in dark mode. The first instance contains a scheme file. The second instance was created from the first instance by middle clicking on the selection in the first window's command line. This selection starts up a scheme compiler, comping the argument, and the scheme repl is now integrated via a pipe in the second instance.
+The screenshot shows two instances of Jed in dark mode. The first instance contains a scheme file. The second instance was created from the first instance by middle clicking on the selection in the first window's command line. This selection starts up the scheme compiler [skiwi](https://github.com/janm31415/skiwi), compiling the argument and starting a scheme repl. All this is integrated via a pipe in the second instance, so that the scheme repl can be used inside Jed.
 ![](images/jed.png)
