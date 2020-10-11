@@ -24,6 +24,7 @@ struct settings
   uint32_t color_editor_text_bold;
   uint32_t color_editor_background_bold;
   uint32_t color_editor_tag_bold;
+  uint32_t color_line_numbers;
 
   uint32_t color_command_text;
   uint32_t color_command_background;

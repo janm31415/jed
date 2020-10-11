@@ -186,8 +186,8 @@ int columns_reserved_for_line_numbers(int64_t scroll_row, const settings& s)
     {
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
-    scroll_row += rows;
-    return number_of_digits(scroll_row);
+    scroll_row += rows - (4 + s.command_buffer_rows);
+    return number_of_digits(scroll_row)+1;
     }
   return 0;
   }
@@ -742,7 +742,12 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       str >> line_nr_str;
       for (int p = 0; p < line_nr_str.length(); ++p)
         {
-        addch(line_nr_str[p]);
+        addch(line_nr_str[p]);        
+        }
+      for (int p = 2; p < offset_x; ++p)
+        {
+        move((int)r + offset_y, p);
+        add_ex(position(line_nr - 1, 0), SET_LINENUMBER);
         }
       attrset(DEFAULT_COLOR);
       }
@@ -843,6 +848,9 @@ void draw_scroll_bars(app_state state, const settings& s)
     add_ex(position(rowpos, 0), SET_SCROLLBAR_EDITOR);
     addch(ascii_to_utf16(scrollbar_ascii_sign));
 
+    move(r + offset_y, 1);
+    add_ex(position(rowpos, 0), SET_SCROLLBAR_EDITOR);
+      
 
     if (r == scroll2)
       {
@@ -2223,6 +2231,7 @@ std::optional<app_state> command_acme_theme(app_state state, settings& s)
   s.color_editor_text_bold = 0xff000000;
   s.color_editor_background_bold = 0xffa2e9eb;
   s.color_editor_tag_bold = 0xffff9b73;
+  s.color_line_numbers = 0xfff18255;
 
   s.color_command_text = 0xff000000;
   s.color_command_background = 0xfffcfbe7;
@@ -2249,13 +2258,14 @@ std::optional<app_state> command_dark_theme(app_state state, settings& s)
   s.color_editor_text_bold = 0xffffffff;
   s.color_editor_background_bold = 0xff000000;
   s.color_editor_tag_bold = 0xffff9b73;
+  s.color_line_numbers = 0xff505050;
 
   s.color_command_text = 0xffc0c0c0;
-  s.color_command_background = 0x282828;
+  s.color_command_background = 0xff282828;
   s.color_command_tag = 0xfff18255;
 
   s.color_titlebar_text = 0xffc0c0c0;
-  s.color_titlebar_background = 0x282828;
+  s.color_titlebar_background = 0xff282828;
 
   s.color_comment = 0xff64c385;
   s.color_string = 0xff6464db;
@@ -2275,6 +2285,7 @@ std::optional<app_state> command_matrix_theme(app_state state, settings& s)
   s.color_editor_text_bold = 0xff8ded08;
   s.color_editor_background_bold = 0xff000000;
   s.color_editor_tag_bold = 0xff00ff00;
+  s.color_line_numbers = 0xff005000;
 
   s.color_command_text = 0xff83ff83;
   s.color_command_background = 0xff002000;
@@ -2301,6 +2312,7 @@ std::optional<app_state> command_light_theme(app_state state, settings& s)
   s.color_editor_text_bold = 0xff000000;
   s.color_editor_background_bold = 0xff000000;
   s.color_editor_tag_bold = 0xff808080;
+  s.color_line_numbers = 0xff808080;
 
   s.color_command_text = 0xff000000;
   s.color_command_background = 0xffe9dbd6;
@@ -3124,14 +3136,9 @@ std::optional<app_state> middle_mouse_button_up(app_state state, int x, int y, s
   mouse.middle_button_down = false;
 
   screen_ex_pixel p = get_ex(y, x);
-  screen_ex_pixel p_left;
-  if (x)
-    p_left = get_ex(y, x - 1);
 
-  if ((p.type == SET_SCROLLBAR_EDITOR) || (p_left.type == SET_SCROLLBAR_EDITOR))
+  if ((p.type == SET_SCROLLBAR_EDITOR))
     {
-    if (p.type != SET_SCROLLBAR_EDITOR)
-      p = p_left;
     int rows, cols;
     get_editor_window_size(rows, cols, state.scroll_row, s);
     state.scroll_row = p.pos.row;

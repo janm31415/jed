@@ -49,7 +49,8 @@ namespace
     jed_comment = 32,
     jed_string = 33,
     jed_keyword = 34,
-    jed_keyword_2 = 35
+    jed_keyword_2 = 35,
+    jed_line_colors = 36
     };
 
   }
@@ -75,6 +76,8 @@ void init_colors(const settings& s)
   init_color(jed_editor_bg_bold, rgb(s.color_editor_background_bold));
   init_color(jed_editor_tag_bold, rgb(s.color_editor_tag_bold));
 
+  init_color(jed_line_colors, rgb(s.color_line_numbers));
+
   init_color(jed_command_text_bold, rgb(s.color_command_text));
   init_color(jed_command_bg_bold, rgb(s.color_command_background));
   init_color(jed_command_tag_bold, rgb(s.color_command_tag));
@@ -99,5 +102,5 @@ void init_colors(const settings& s)
   init_pair(keyword_color, jed_keyword, jed_editor_bg);
   init_pair(keyword_2_color, jed_keyword_2, jed_editor_bg);
 
-  init_pair(linenumbers_color, jed_editor_tag, jed_editor_bg);
+  init_pair(linenumbers_color, jed_line_colors, jed_editor_bg);
   }

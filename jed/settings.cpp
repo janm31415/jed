@@ -27,12 +27,14 @@ settings::settings()
   color_editor_background_bold = 0xff000000;
   color_editor_tag_bold = 0xffff9b73;
 
+  color_line_numbers = 0xff505050;
+
   color_command_text = 0xffc0c0c0;
-  color_command_background = 0x282828;
+  color_command_background = 0xff282828;
   color_command_tag = 0xfff18255;
 
   color_titlebar_text = 0xffc0c0c0;
-  color_titlebar_background = 0x282828;
+  color_titlebar_background = 0xff282828;
 
   color_comment = 0xff64c385;
   color_string = 0xff6464db;
@@ -74,6 +76,7 @@ void update_settings(settings& s, const char* filename)
   f["color_string"] >> s.color_string;
   f["color_keyword"] >> s.color_keyword;
   f["color_keyword_2"] >> s.color_keyword_2;
+  f["color_line_numbers"] >> s.color_line_numbers;
 
   f.release();
   }
@@ -119,5 +122,6 @@ void write_settings(const settings& s, const char* filename)
   f << "color_string" << s.color_string;
   f << "color_keyword" << s.color_keyword;
   f << "color_keyword_2" << s.color_keyword_2;
+  f << "color_line_numbers" << s.color_line_numbers;
   f.release();
   }
