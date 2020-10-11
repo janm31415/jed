@@ -94,7 +94,7 @@ two buttons, then the middle button is replaced by Ctrl + the left button.
   If you right click on the title bar, a new instance of Jed will open
   where you can browse the current working folder.
 
-The following commands/shortcuts are currently available in Jed:
+The following commands/shortcuts are currently available in Jed (^ stands for Ctrl):
 
 
     ^+             : increase command window
