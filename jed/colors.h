@@ -6,6 +6,7 @@ enum e_color
   {
   default_color = 1,
   command_color,
+  linenumbers_color,
   multiline_tag_editor,
   multiline_tag_command,
   scroll_bar_b_editor,

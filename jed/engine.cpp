@@ -102,12 +102,12 @@ bool ctrl_pressed()
 #endif
   return (keyb.is_down(SDLK_LCTRL) || keyb.is_down(SDLK_RCTRL));
   }
-  
+
 bool alt_pressed()
   {
   return (keyb.is_down(SDLK_LALT) || keyb.is_down(SDLK_RALT));
   }
-  
+
 bool shift_pressed()
   {
   return (keyb.is_down(SDLK_LSHIFT) || keyb.is_down(SDLK_RSHIFT));
@@ -156,16 +156,52 @@ bool is_modified(const app_state& state)
   return ((state.buffer.modification_mask & 1) == 1);
   }
 
-void get_editor_window_size(int& rows, int& cols, const settings& s)
+inline int number_of_digits(int64_t v) 
+  {
+  return  1
+    + (int)(v >= 10)
+    + (int)(v >= 100)
+    + (int)(v >= 1000)
+    + (int)(v >= 10000)
+    + (int)(v >= 100000)
+    + (int)(v >= 1000000)
+    + (int)(v >= 10000000)
+    + (int)(v >= 100000000)
+    + (int)(v >= 1000000000)
+    + (int)(v >= 10000000000ull)
+    + (int)(v >= 100000000000ull)
+    + (int)(v >= 1000000000000ull)
+    + (int)(v >= 10000000000000ull)
+    + (int)(v >= 100000000000000ull)
+    + (int)(v >= 1000000000000000ull)
+    + (int)(v >= 10000000000000000ull)
+    + (int)(v >= 100000000000000000ull)
+    + (int)(v >= 1000000000000000000ull)
+    + (int)(v >= 10000000000000000000ull);
+  }
+
+int columns_reserved_for_line_numbers(int64_t scroll_row, const settings& s)
+  {
+  if (s.show_line_numbers)
+    {
+    int rows, cols;
+    getmaxyx(stdscr, rows, cols);
+    scroll_row += rows;
+    return number_of_digits(scroll_row);
+    }
+  return 0;
+  }
+
+void get_editor_window_size(int& rows, int& cols, int64_t scroll_row, const settings& s)
   {
   getmaxyx(stdscr, rows, cols);
   rows -= 4 + s.command_buffer_rows;
-  cols -= 2;
+  cols -= 2 + columns_reserved_for_line_numbers(scroll_row, s);
   }
 
-void get_editor_window_offset(int& offsetx, int& offsety, const settings& s)
+void get_editor_window_offset(int& offsetx, int& offsety, int64_t scroll_row, const settings& s)
   {
-  offsetx = 2;
+  offsetx = 2 + columns_reserved_for_line_numbers(scroll_row, s);
   offsety = 1 + s.command_buffer_rows;
   }
 
@@ -397,8 +433,8 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
   bool keyword_type_2 = false;
 
   for (; it != it_end; ++it)
-    {    
-    if (next_word_read_length_remaining>0)
+    {
+    if (next_word_read_length_remaining > 0)
       --next_word_read_length_remaining;
     if (drawn >= maxcol)
       break;
@@ -428,14 +464,14 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
 
     switch (current_tt.second)
       {
-      case tt_normal: 
+      case tt_normal:
       {
       if (keyword_type_1)
         attron(COLOR_PAIR(keyword_color));
       else if (keyword_type_2)
         attron(COLOR_PAIR(keyword_2_color));
       else
-        attron(base_color); 
+        attron(base_color);
       break;
       }
       case tt_string: attron(COLOR_PAIR(string_color)); break;
@@ -449,7 +485,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
 
     if (!has_selection && (current == cursor))
       {
-      attron(A_REVERSE);      
+      attron(A_REVERSE);
       }
 
     attroff(A_UNDERLINE | A_ITALIC);
@@ -470,7 +506,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
     wide_characters_offset += cwidth - 1;
     ++current.col;
     }
-    
+
   attroff(A_UNDERLINE | A_ITALIC);
 
   if (!in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular, senv))
@@ -537,7 +573,7 @@ void draw_help_text(app_state state)
     static std::string line1("^N New    ^O Open   ^S Put    ^W Save   ^C Copy   ^V Paste  ^Z Undo   ^Y Redo");
     static std::string line2("F1 Help   ^X Exit   ^F Find   ^G Goto   ^H Replace^A Sel/all");
     draw_help_line(line1, rows - 2, cols);
-    draw_help_line(line2, rows - 1, cols-1); // cols - 1 because we need to avoid that the last character is drawn: pdcurses will do a \n, causing our layout to be messed up
+    draw_help_line(line2, rows - 1, cols - 1); // cols - 1 because we need to avoid that the last character is drawn: pdcurses will do a \n, causing our layout to be messed up
     }
   if (state.operation == op_find)
     {
@@ -668,8 +704,8 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
   int offset_y = 0;
 
   int maxrow, maxcol;
-  get_editor_window_size(maxrow, maxcol, s);
-  get_editor_window_offset(offset_x, offset_y, s);
+  get_editor_window_size(maxrow, maxcol, scroll_row, s);
+  get_editor_window_offset(offset_x, offset_y, scroll_row, s);
 
   position current;
   current.row = scroll_row;
@@ -695,6 +731,21 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
   int r = 0;
   for (; r < maxrow; ++r)
     {
+    if (s.show_line_numbers)
+      {
+      attrset(A_NORMAL | COLOR_PAIR(linenumbers_color));
+      const int64_t line_nr = current.row + 1;
+      move((int)r + offset_y, offset_x - number_of_digits(line_nr) - 1);
+      std::stringstream str;
+      str << line_nr;
+      std::string line_nr_str;
+      str >> line_nr_str;
+      for (int p = 0; p < line_nr_str.length(); ++p)
+        {
+        addch(line_nr_str[p]);
+        }
+      attrset(DEFAULT_COLOR);
+      }
     current.col = 0;
     if (current.row >= fb.content.size())
       {
@@ -753,8 +804,8 @@ void draw_scroll_bars(app_state state, const settings& s)
   int offset_y = 0;
 
   int maxrow, maxcol;
-  get_editor_window_size(maxrow, maxcol, s);
-  get_editor_window_offset(offset_x, offset_y, s);
+  get_editor_window_size(maxrow, maxcol, state.scroll_row, s);
+  get_editor_window_offset(offset_x, offset_y, state.scroll_row, s);
 
   int scroll1 = 0;
   int scroll2 = maxrow - 1;
@@ -836,7 +887,7 @@ app_state draw(app_state state, const settings& s)
       addch(ch);
       }
     int maxrow, maxcol;
-    get_editor_window_size(maxrow, maxcol, s);
+    get_editor_window_size(maxrow, maxcol, state.scroll_row, s);
     int cols_available = maxcol - txt.length();
     int wide_characters_offset = 0;
     int multiline_offset_x = txt.length();
@@ -895,7 +946,7 @@ app_state draw(app_state state, const settings& s)
 app_state check_scroll_position(app_state state, const settings& s)
   {
   int rows, cols;
-  get_editor_window_size(rows, cols, s);
+  get_editor_window_size(rows, cols, state.scroll_row, s);
   if (state.scroll_row > state.buffer.pos.row)
     state.scroll_row = state.buffer.pos.row;
   else if (state.scroll_row + rows <= state.buffer.pos.row)
@@ -921,7 +972,7 @@ app_state check_command_scroll_position(app_state state, const settings& s)
 app_state check_operation_scroll_position(app_state state, const settings& s)
   {
   int rows, cols;
-  get_editor_window_size(rows, cols, s);
+  get_editor_window_size(rows, cols, state.scroll_row, s);
   int64_t lastrow = (int64_t)state.operation_buffer.content.size() - 1;
   if (lastrow < 0)
     lastrow = 0;
@@ -1091,7 +1142,7 @@ app_state move_page_up_editor(app_state state, const settings& s)
   {
   state = cancel_selection(state);
   int rows, cols;
-  get_editor_window_size(rows, cols, s);
+  get_editor_window_size(rows, cols, state.scroll_row, s);
 
   state.scroll_row -= rows - 1;
   if (state.scroll_row < 0)
@@ -1121,7 +1172,7 @@ app_state move_page_up_operation(app_state state, const settings& s)
   {
   state = cancel_selection(state);
   int rows, cols;
-  get_editor_window_size(rows, cols, s);
+  get_editor_window_size(rows, cols, state.scroll_row, s);
 
   state.operation_scroll_row -= rows - 1;
   if (state.operation_scroll_row < 0)
@@ -1143,7 +1194,7 @@ app_state move_page_down_editor(app_state state, const settings& s)
   {
   state = cancel_selection(state);
   int rows, cols;
-  get_editor_window_size(rows, cols, s);
+  get_editor_window_size(rows, cols, state.scroll_row, s);
   state.scroll_row += rows - 1;
   if (state.scroll_row + rows >= state.buffer.content.size())
     state.scroll_row = (int64_t)state.buffer.content.size() - rows + 1;
@@ -1171,7 +1222,7 @@ app_state move_page_down_operation(app_state state, const settings& s)
   {
   state = cancel_selection(state);
   int rows, cols;
-  get_editor_window_size(rows, cols, s);
+  get_editor_window_size(rows, cols, state.scroll_row, s);
   state.operation_scroll_row += rows - 1;
   return check_operation_scroll_position(state, s);
   }
@@ -1525,7 +1576,7 @@ app_state save_file(app_state state)
     wfilename = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
   std::replace(wfilename.begin(), wfilename.end(), L'\\', L'/'); // replace all '\\' by '/'      
   std::string filename = clean_filename(jtk::convert_wstring_to_string(wfilename));
-  
+
   if (jtk::get_folder(filename).empty())
     {
     std::string newfilename = jtk::get_cwd();
@@ -1534,7 +1585,7 @@ app_state save_file(app_state state)
     newfilename.append(filename);
     newfilename.swap(filename);
     }
-  
+
   //if (filename.find(' ') != std::string::npos)
   //  {
   //  filename.push_back('"');
@@ -1764,7 +1815,7 @@ std::optional<app_state> make_find_buffer(app_state state, settings& s)
   {
   state = clear_operation_buffer(state);
   state.operation_buffer = insert(state.operation_buffer, s.last_find, convert(s), false);
-  state.operation_buffer.start_selection = position(0,0);
+  state.operation_buffer.start_selection = position(0, 0);
   state.operation_buffer = move_end(state.operation_buffer, convert(s));
   return state;
   }
@@ -1851,10 +1902,10 @@ std::optional<app_state> command_redo(app_state state, settings& s)
     state.operation_buffer = redo(state.operation_buffer, convert(s));
   return check_scroll_position(state, s);
   }
-  
+
 #ifndef _WIN32
 std::string pbpaste()
-{
+  {
 #if defined(__APPLE__)
   FILE* pipe = popen("pbpaste", "r");
 #else
@@ -1863,16 +1914,16 @@ std::string pbpaste()
   if (!pipe) return "ERROR";
   char buffer[128];
   std::string result = "";
-  while(!feof(pipe))
-  {
-    if(fgets(buffer, 128, pipe) != NULL)
+  while (!feof(pipe))
     {
+    if (fgets(buffer, 128, pipe) != NULL)
+      {
       result += buffer;
+      }
     }
-  }
   pclose(pipe);
   return result;
-}
+  }
 #endif
 
 std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings& s)
@@ -1888,7 +1939,7 @@ std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings&
   std::wstring txt = to_wstring(state.snarf_buffer);
   copy_to_windows_clipboard(jtk::convert_wstring_to_string(txt));
 #else
-  std::string txt = to_string(state.snarf_buffer);  
+  std::string txt = to_string(state.snarf_buffer);
   int pipefd[3];
 #if defined(__APPLE__)
   std::string pbcopy = get_file_path("pbcopy", "");
@@ -1966,7 +2017,7 @@ std::optional<app_state> command_select_all(app_state state, settings& s)
 std::optional<app_state> move_editor_window_up_down(app_state state, int steps, const settings& s)
   {
   int rows, cols;
-  get_editor_window_size(rows, cols, s);
+  get_editor_window_size(rows, cols, state.scroll_row, s);
   state.scroll_row += steps;
   int64_t lastrow = (int64_t)state.buffer.content.size() - 1;
   if (lastrow < 0)
@@ -2285,21 +2336,9 @@ std::optional<app_state> command_show_all_characters(app_state state, settings& 
   return state;
   }
 
-std::optional<app_state> command_tab_2(app_state state, settings& s)
+std::optional < app_state> command_line_numbers(app_state state, settings& s)
   {
-  s.tab_space = 2;
-  return state;
-  }
-
-std::optional<app_state> command_tab_4(app_state state, settings& s)
-  {
-  s.tab_space = 4;
-  return state;
-  }
-
-std::optional<app_state> command_tab_8(app_state state, settings& s)
-  {
-  s.tab_space = 8;
+  s.show_line_numbers = !s.show_line_numbers;
   return state;
   }
 
@@ -2320,7 +2359,7 @@ std::optional<app_state> command_tab_spaces(app_state state, settings& s)
   return state;
   }
 
-std::optional<app_state> command_piped_win(app_state state,  std::wstring& parameters, settings& s)
+std::optional<app_state> command_piped_win(app_state state, std::wstring& parameters, settings& s)
   {
   remove_whitespace(parameters);
   write_settings(s, get_file_in_executable_path("jed_settings.json").c_str());
@@ -2333,7 +2372,7 @@ std::optional<app_state> command_piped_win(app_state state,  std::wstring& param
     exepath.push_back('=');
     exepath.append(jtk::convert_wstring_to_string(parameters));
     }
-  return execute(state, jtk::convert_string_to_wstring(exepath), s);  
+  return execute(state, jtk::convert_string_to_wstring(exepath), s);
   }
 
 const auto executable_commands = std::map<std::wstring, std::function<std::optional<app_state>(app_state, settings&)>>
@@ -2351,6 +2390,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Help", command_help},
   {L"Kill", command_kill},
   {L"LightTheme", command_light_theme},
+  {L"LineNumbers", command_line_numbers},
   {L"MatrixTheme", command_matrix_theme},
   {L"New", command_new},
   {L"No", command_no},
@@ -2362,9 +2402,6 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Save", command_save_as},
   {L"Sel/all", command_select_all},
   {L"TabSpaces", command_tab_spaces},
-  {L"Tab2", command_tab_2},
-  {L"Tab4", command_tab_4},
-  {L"Tab8", command_tab_8},  
   {L"Undo", command_undo},
   {L"Yes", command_yes}
   };
@@ -2716,10 +2753,10 @@ std::string compose_folder_from_split(const std::vector<std::string>& split)
     }
   return out;
   }
-  
+
 
 std::string simplify_folder(const std::string& folder)
-  {  
+  {
   auto split = split_folder(folder);
   split = simplify_split_folder(split);
   std::string simplified_folder_name = compose_folder_from_split(split);
@@ -3065,8 +3102,8 @@ std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, con
   if (p.type == SET_SCROLLBAR_EDITOR)
     {
     int offsetx, offsety, cols, rows;
-    get_editor_window_offset(offsetx, offsety, s);
-    get_editor_window_size(rows, cols, s);
+    get_editor_window_offset(offsetx, offsety, state.scroll_row, s);
+    get_editor_window_size(rows, cols, state.scroll_row, s);
     double fraction = (double)(y - offsety) / (double)rows;
     int steps = (int)(fraction * rows);
     if (steps < 1)
@@ -3096,7 +3133,7 @@ std::optional<app_state> middle_mouse_button_up(app_state state, int x, int y, s
     if (p.type != SET_SCROLLBAR_EDITOR)
       p = p_left;
     int rows, cols;
-    get_editor_window_size(rows, cols, s);
+    get_editor_window_size(rows, cols, state.scroll_row, s);
     state.scroll_row = p.pos.row;
     int64_t lastrow = (int64_t)state.buffer.content.size() - 1;
     if (lastrow < 0)
@@ -3139,8 +3176,8 @@ std::optional<app_state> right_mouse_button_up(app_state state, int x, int y, se
   if (p.type == SET_SCROLLBAR_EDITOR)
     {
     int offsetx, offsety, cols, rows;
-    get_editor_window_offset(offsetx, offsety, s);
-    get_editor_window_size(rows, cols, s);
+    get_editor_window_offset(offsetx, offsety, state.scroll_row, s);
+    get_editor_window_size(rows, cols, state.scroll_row, s);
     double fraction = (double)(y - offsety) / (double)rows;
     int steps = (int)(fraction * rows);
     if (steps < 1)
@@ -3180,7 +3217,7 @@ app_state start_pipe(app_state state, const std::string& inputfile, const std::v
   //state.buffer = make_empty_buffer();
   state.buffer.name = "=" + inputfile;
   state.scroll_row = 0;
-  state.operation = op_editing;  
+  state.operation = op_editing;
   state.wt = wt_piped;
 
   char** argv = alloc_arguments(inputfile, parameters);
@@ -3220,7 +3257,7 @@ app_state start_pipe(app_state state, const std::string& inputfile, const std::v
   }
 
 app_state start_pipe(app_state state, const std::string& inputfile, int argc, char** argv, settings& s)
-  { 
+  {
   std::vector<std::string> parameters;
   for (int j = 2; j < argc; ++j)
     parameters.emplace_back(argv[j]);
@@ -3307,11 +3344,11 @@ std::optional<app_state> process_input(app_state state, settings& s)
           case SDLK_KP_ENTER:
           case SDLK_RETURN: return ret(state, s);
           case SDLK_BACKSPACE: return backspace(state, s);
-          case SDLK_DELETE: 
+          case SDLK_DELETE:
           {
           if (shift_pressed()) // copy
             {
-            state = *command_copy_to_snarf_buffer(state, s); 
+            state = *command_copy_to_snarf_buffer(state, s);
             }
           return del(state, s);
           }
@@ -3680,7 +3717,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
   init_colors(s);
   bkgd(COLOR_PAIR(default_color));
 
-  state.wt = wt_normal;  
+  state.wt = wt_normal;
 
   //if (argc > 1)
   for (int j = 1; j < argc; ++j)
@@ -3734,7 +3771,7 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
       else
         state.buffer = read_from_file(inputfile);
       }
-    }  
+    }
   if (state.buffer.name.empty())
     {
     if (!s.startup_folder.empty())

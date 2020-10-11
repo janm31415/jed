@@ -113,6 +113,7 @@ The following commands/shortcuts are currently available in Jed (^ stands for Ct
     Kill           : kill the current running piped process if any 
                      (cfr. Win command)
     LightTheme     : change the color code to light
+    LineNumbers    : toggle visualization of line numbers
     MatrixTheme    : change the color code to shades of green
     New, ^n        : make an empty buffer
     Open, ^o       : open a new file or folder
@@ -123,9 +124,6 @@ The following commands/shortcuts are currently available in Jed (^ stands for Ct
     Save, ^w       : save the current file as 
     Sel/all, ^a    : select all
     TabSpaces      : toggle tab between spaces and real tab
-    Tab2           : Make tab 2 spaces wide
-    Tab4           : Make tab 4 spaces wide
-    Tab8           : Make tab 8 spaces wide
     Tab <nr>       : Make tab nr spaces wide
     Win <command>  : Make a piped Jed instance running the command, e.g. Win cmd 
                      will run Window's command shell inside jed.

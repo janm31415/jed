@@ -89,9 +89,6 @@ void init_colors(const settings& s)
 
   init_pair(title_bar, jed_title_text, jed_title_bg);
 
-  rgb local_comment_color(133, 195, 100);
-  rgb local_string_color(219, 100, 100);
-
   init_color(jed_comment, rgb(s.color_comment));
   init_color(jed_string, rgb(s.color_string));
   init_color(jed_keyword, rgb(s.color_keyword));
@@ -101,4 +98,6 @@ void init_colors(const settings& s)
   init_pair(string_color, jed_string, jed_editor_bg);
   init_pair(keyword_color, jed_keyword, jed_editor_bg);
   init_pair(keyword_2_color, jed_keyword_2, jed_editor_bg);
+
+  init_pair(linenumbers_color, jed_editor_tag, jed_editor_bg);
   }
