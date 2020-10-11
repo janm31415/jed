@@ -1,6 +1,6 @@
 # Jed
 
-Jan's editor: a minimalist text editor inspired by Acme and Nano.
+Jan's editor: a minimalist text editor inspired by [Acme](http://acme.cat-v.org/) and [Nano](https://github.com/madnight/nano).
 
 Building
 --------
