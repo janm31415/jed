@@ -1014,15 +1014,16 @@ app_state check_scroll_position(app_state state, const settings& s)
         if (actual_rows >= rows)
           break;
         }
-      if (state.scroll_row + r < state.buffer.pos.row)
+      int64_t my_row = wrapped_line_rows(state.buffer.content[state.buffer.pos.row], cols, rows, senv);
+      if (state.scroll_row + r < state.buffer.pos.row + my_row - 1)
         {
         state.scroll_row = state.buffer.pos.row;
         r = 0;
-        actual_rows = 0;
+        actual_rows = my_row;
         for (; r < rows; ++r)
           {
           actual_rows += wrapped_line_rows(state.buffer.content[state.scroll_row - 1], cols, rows, senv);
-          if (actual_rows < rows)
+          if (actual_rows <= rows)
             --state.scroll_row;
           else
             break;
