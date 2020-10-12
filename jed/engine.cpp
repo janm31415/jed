@@ -319,13 +319,32 @@ void draw_title_bar(app_state state)
 
 #define MULTILINEOFFSET 10
 
+bool line_can_be_wrapped(line ln, int maxcol, int maxrow, const env_settings& senv)
+  {
+  int64_t max_length_allowed = (maxcol-1)*(maxrow-1);
+  int64_t full_len = line_length_up_to_column(ln, max_length_allowed + 1, senv);
+  return (full_len < max_length_allowed);
+  }
+  
+int64_t wrapped_line_rows(line ln, int maxcol, int maxrow, const env_settings& senv)
+  {
+  int64_t max_length_allowed = (maxcol-1)*(maxrow-1);
+  int64_t full_len = line_length_up_to_column(ln, max_length_allowed + 1, senv);
+  if (full_len < max_length_allowed)
+    {
+    return full_len / (maxcol-1) + 1;
+    }
+  else
+    return 1;
+  }
+
 /*
 Returns an x offset (let's call it multiline_offset_x) such that
   int x = (int)current.col + multiline_offset_x + wide_characters_offset;
 equals the x position in the screen of where the next character should come.
 This makes it possible to further fill the line with spaces after calling "draw_line".
 */
-int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, position underline, chtype base_color, int r, int xoffset, int maxcol, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const keyword_data& kd, const settings& s, const env_settings& senv)
+int draw_line(int& wide_characters_offset, file_buffer fb, position& current, position cursor, position buffer_pos, position underline, chtype base_color, int& r, int yoffset, int xoffset, int maxcol, int maxrow, std::optional<position> start_selection, bool rectangular, bool active, screen_ex_type set_type, const keyword_data& kd, bool wrap, const settings& s, const env_settings& senv)
   {
   auto tt = get_text_type(fb, current.row);
 
@@ -338,11 +357,17 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
   bool has_selection = (start_selection != std::nullopt) && (cursor.row >= 0) && (cursor.col >= 0);
 
   int64_t len = line_length_up_to_column(ln, maxcol - 1, senv);
+  
+  if (wrap && (len >= (maxcol - 1)))
+    {
+    if (!line_can_be_wrapped(ln, maxcol, maxrow, senv))
+      wrap = false;
+    }
 
-  bool multiline = (cursor.row == current.row) && (len >= (maxcol - 1));
+  bool multiline = !wrap && (cursor.row == current.row) && (len >= (maxcol - 1));
   int64_t multiline_ref_col = cursor.col;
 
-  if (!multiline && has_selection)
+  if (!multiline && has_selection && !wrap)
     {
     if (!rectangular)
       {
@@ -412,7 +437,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
         wide_characters_offset = length_done - (current.col - 1);
         xoffset -= current.col + wide_characters_offset;
         }
-      move((int)r, (int)current.col + xoffset + wide_characters_offset);
+      move((int)r + yoffset, (int)current.col + xoffset + wide_characters_offset);
       attron(COLOR_PAIR(multiline_tag));
       add_ex(position(), SET_NONE);
       addch('$');
@@ -436,7 +461,7 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
     {
     if (next_word_read_length_remaining > 0)
       --next_word_read_length_remaining;
-    if (drawn >= maxcol)
+    if (!wrap && drawn >= maxcol)
       break;
 
     while (!tt.empty() && tt.back().first <= current.col)
@@ -494,17 +519,34 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
     if (current == underline)
       attron(A_UNDERLINE | A_ITALIC);
 
-    move((int)r, (int)current.col + xoffset + wide_characters_offset);
+    move((int)r + yoffset, (int)current.col + xoffset + wide_characters_offset);
     auto character = *it;
     uint32_t cwidth = character_width(character, current.col + wide_characters_offset, senv);
-    for (uint32_t cnt = 0; cnt < cwidth && drawn < maxcol; ++cnt)
+    for (int32_t cnt = 0; cnt < cwidth; ++cnt)
       {
       add_ex(current, set_type);
       addch(character_to_pdc_char(character, cnt, s));
       ++drawn;
+      if (drawn == maxcol)
+        {
+        if (wrap)
+          {
+          drawn = 0;
+          ++r;
+          if (r >= maxrow)
+            break; // test this
+          wide_characters_offset = -(int)current.col - 1;
+          move((int)r + yoffset, (int)current.col + xoffset + wide_characters_offset);
+          wide_characters_offset -= cnt;
+          }
+        else
+          break;
+        }
       }
     wide_characters_offset += cwidth - 1;
     ++current.col;
+    if (wrap && r >= maxrow)
+      break;
     }
 
   attroff(A_UNDERLINE | A_ITALIC);
@@ -671,7 +713,7 @@ void draw_command_buffer(file_buffer fb, int64_t scroll_row, const settings& s, 
     keyword_data kd;
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, COMMAND_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, kd, s, senv);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, COMMAND_COLOR, r, offset_y, offset_x, maxcol, maxrow, fb.start_selection, fb.rectangular_selection, active, SET_TEXT_COMMAND, kd, false, s, senv);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if (!has_nontrivial_selection && (current == cursor))
@@ -766,7 +808,7 @@ void draw_buffer(file_buffer fb, int64_t scroll_row, screen_ex_type set_type, co
       }
 
     int wide_characters_offset = 0;
-    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, DEFAULT_COLOR, r + offset_y, offset_x, maxcol, fb.start_selection, fb.rectangular_selection, active, set_type, kd, s, senv);
+    int multiline_offset_x = draw_line(wide_characters_offset, fb, current, cursor, fb.pos, underline, DEFAULT_COLOR, r, offset_y, offset_x, maxcol, maxrow, fb.start_selection, fb.rectangular_selection, active, set_type, kd, s.wrap, s, senv);
 
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if (!has_nontrivial_selection && (current == cursor))
@@ -901,7 +943,7 @@ app_state draw(app_state state, const settings& s)
     int multiline_offset_x = txt.length();
     keyword_data kd;
     if (!state.operation_buffer.content.empty())
-      multiline_offset_x = draw_line(wide_characters_offset, state.operation_buffer, current, cursor, state.operation_buffer.pos, position(-1, -1), DEFAULT_COLOR | A_BOLD, rows - 3, multiline_offset_x, cols_available, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_TEXT_OPERATION, kd, s, senv);
+      multiline_offset_x = draw_line(wide_characters_offset, state.operation_buffer, current, cursor, state.operation_buffer.pos, position(-1, -1), DEFAULT_COLOR | A_BOLD, rows, - 3, multiline_offset_x, cols_available, 1, state.operation_buffer.start_selection, state.operation_buffer.rectangular_selection, true, SET_TEXT_OPERATION, kd, false, s, senv);
     int x = (int)current.col + multiline_offset_x + wide_characters_offset;
     if ((current == cursor))
       {
@@ -957,9 +999,42 @@ app_state check_scroll_position(app_state state, const settings& s)
   get_editor_window_size(rows, cols, state.scroll_row, s);
   if (state.scroll_row > state.buffer.pos.row)
     state.scroll_row = state.buffer.pos.row;
-  else if (state.scroll_row + rows <= state.buffer.pos.row)
+  else
     {
-    state.scroll_row = state.buffer.pos.row - rows + 1;
+    if (s.wrap)
+      {
+      auto senv = convert(s);
+      int64_t actual_rows = 0;
+      int r = 0;
+      for (; r < rows; ++r)
+        {
+        if (state.scroll_row + r >= state.buffer.content.size())
+          break;
+        actual_rows += wrapped_line_rows(state.buffer.content[state.scroll_row + r], cols, rows, senv);
+        if (actual_rows >= rows)
+          break;
+        }
+      if (state.scroll_row + r < state.buffer.pos.row)
+        {
+        state.scroll_row = state.buffer.pos.row;
+        r = 0;
+        actual_rows = 0;
+        for (; r < rows; ++r)
+          {
+          actual_rows += wrapped_line_rows(state.buffer.content[state.scroll_row - 1], cols, rows, senv);
+          if (actual_rows < rows)
+            --state.scroll_row;
+          else
+            break;
+          if (state.scroll_row == 0)
+            break;
+          }
+        }
+      }
+    else if (state.scroll_row + rows <= state.buffer.pos.row)
+      {
+      state.scroll_row = state.buffer.pos.row - rows + 1;
+      }
     }
   return state;
   }
@@ -2348,9 +2423,15 @@ std::optional<app_state> command_show_all_characters(app_state state, settings& 
   return state;
   }
 
-std::optional < app_state> command_line_numbers(app_state state, settings& s)
+std::optional<app_state> command_line_numbers(app_state state, settings& s)
   {
   s.show_line_numbers = !s.show_line_numbers;
+  return state;
+  }
+  
+std::optional<app_state> command_wrap(app_state state, settings& s)
+  {
+  s.wrap = !s.wrap;
   return state;
   }
 
@@ -2415,6 +2496,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Sel/all", command_select_all},
   {L"TabSpaces", command_tab_spaces},
   {L"Undo", command_undo},
+  {L"Wrap", command_wrap},
   {L"Yes", command_yes}
   };
 

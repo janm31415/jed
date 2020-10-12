@@ -10,6 +10,7 @@ settings::settings()
   tab_space = 2;
   use_spaces_for_tab = true;
   show_line_numbers = false;
+  wrap = false;
   w = 80;
   h = 25;
   x = 100;
@@ -60,6 +61,7 @@ void update_settings(settings& s, const char* filename)
   f["last_find"] >> s.last_find;
   f["last_replace"] >> s.last_replace;
   f["show_line_numbers"] >> s.show_line_numbers;
+  f["wrap"] >> s.wrap;
 
   f["color_editor_text"] >> s.color_editor_text;
   f["color_editor_background"] >> s.color_editor_background;
@@ -106,6 +108,7 @@ void write_settings(const settings& s, const char* filename)
   f << "last_find" << s.last_find;
   f << "last_replace" << s.last_replace;
   f << "show_line_numbers" << s.show_line_numbers;
+  f << "wrap" << s.wrap;
 
   f << "color_editor_text" << s.color_editor_text;
   f << "color_editor_background" << s.color_editor_background;

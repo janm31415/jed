@@ -93,6 +93,7 @@ TabSpaces      : toggle tab between spaces and real tab
 Tab <nr>       : Make tab nr spaces wide
 Win <command>  : Make a piped Jed instance running the command, e.g. Win cmd 
                  will run Window's command shell inside jed.
+Wrap           : Toggle wrapping of lines in the editor window
 Undo, ^z       : undo
 
 

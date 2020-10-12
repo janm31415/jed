@@ -10,6 +10,7 @@ struct settings
   int tab_space;
   bool show_all_characters;
   bool show_line_numbers;
+  bool wrap;
   int w, h, x, y;
   int command_buffer_rows;
   std::string command_text;

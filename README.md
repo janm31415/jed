@@ -127,6 +127,7 @@ The following commands/shortcuts are currently available in Jed (^ stands for Ct
     Tab <nr>       : Make tab nr spaces wide
     Win <command>  : Make a piped Jed instance running the command, e.g. Win cmd 
                      will run Window's command shell inside jed.
+    Wrap           : Toggle wrapping of lines in the editor window
     Undo, ^z       : undo
 
 
