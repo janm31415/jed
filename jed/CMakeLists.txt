@@ -120,3 +120,6 @@ target_link_libraries(jed
 
 add_custom_command(TARGET jed POST_BUILD
    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/Help.txt" "$<TARGET_FILE_DIR:jed>/Help.txt")
+
+add_custom_command(TARGET jed POST_BUILD
+   COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/syntax.json" "$<TARGET_FILE_DIR:jed>/syntax.json")

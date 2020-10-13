@@ -2108,7 +2108,10 @@ std::optional<app_state> move_editor_window_up_down(app_state state, int steps, 
   state.scroll_row += steps;
   int64_t lastrow = (int64_t)state.buffer.content.size() - 1;
   if (lastrow < 0)
-    lastrow = 0;
+    {
+    state.scroll_row = 0;
+    return state;
+    }
   if (state.scroll_row < 0)
     state.scroll_row = 0;
   if (s.wrap)
@@ -2147,6 +2150,8 @@ std::optional<app_state> move_editor_window_up_down(app_state state, int steps, 
     if (state.scroll_row + rows > lastrow + 1)
       state.scroll_row = lastrow - rows + 1;
     }
+  if (state.scroll_row < 0)
+    state.scroll_row = 0;
   return state;
   }
 
@@ -3049,22 +3054,47 @@ std::optional<app_state> mouse_motion(app_state state, int x, int y, const setti
   return state;
   }
 
-bool valid_char_for_word_selection(wchar_t ch)
+bool valid_char_for_cpp_word_selection(wchar_t ch)
   {
   bool valid = false;
   valid |= (ch >= 48 && ch <= 57); // [0 : 9]
   valid |= (ch >= 97 && ch <= 122); // [a : z]
   valid |= (ch >= 65 && ch <= 90); // [A : Z]
   valid |= (ch == 95); // _  c++: naming
-  valid |= (ch == 33); // !  scheme: vector-set!
-  valid |= (ch == 63); // ?  scheme: eq?
-  valid |= (ch == 45); // -  scheme: list-ref
-  valid |= (ch == 42); // *  scheme: let*
   return valid;
+  }
+  
+bool valid_char_for_scheme_word_selection(wchar_t ch)
+  {
+  bool valid = false;
+  valid |= (ch >= 48 && ch <= 57); // [0 : 9]
+  valid |= (ch >= 97 && ch <= 122); // [a : z]
+  valid |= (ch >= 65 && ch <= 90); // [A : Z]
+  valid |= (ch == 33); // !  scheme: vector-set!
+  valid |= (ch == 35); // #
+  valid |= (ch == 37); // %
+  valid |= (ch == 42); // *  scheme: let*
+  valid |= (ch == 43); // +
+  valid |= (ch == 45); // -  scheme: list-ref
+  valid |= (ch == 47); // /
+  valid |= (ch == 60); // <
+  valid |= (ch == 62); // >
+  valid |= (ch == 61); // =
+  valid |= (ch == 63); // ?  scheme: eq?
+  valid |= (ch == 95); // _  c++: naming
+  return valid;
+  }
+
+bool valid_char_for_word_selection(wchar_t ch, bool scheme)
+  {
+  return scheme ? valid_char_for_scheme_word_selection(ch) : valid_char_for_cpp_word_selection(ch);
   }
 
 std::pair<int64_t, int64_t> get_word_from_position(file_buffer fb, position pos)
   {
+  auto ext = jtk::get_extension(fb.name);
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+  bool scheme = ext == std::string("scm");
   std::pair<int64_t, int64_t> selection(-1, -1);
   if (pos.row >= fb.content.size())
     return selection;
@@ -3081,15 +3111,15 @@ std::pair<int64_t, int64_t> get_word_from_position(file_buffer fb, position pos)
     --it;
   while (it > it0)
     {
-    if (!valid_char_for_word_selection(*it))
+    if (!valid_char_for_word_selection(*it, scheme))
       break;
     --it;
     }
-  if (!valid_char_for_word_selection(*it))
+  if (!valid_char_for_word_selection(*it, scheme))
     ++it;
   while (it2 < it_end)
     {
-    if (!valid_char_for_word_selection(*it2))
+    if (!valid_char_for_word_selection(*it2, scheme))
       break;
     ++it2;
     }
@@ -3097,15 +3127,6 @@ std::pair<int64_t, int64_t> get_word_from_position(file_buffer fb, position pos)
     return selection;
   int64_t p1 = (int64_t)std::distance(it0, it);
   int64_t p2 = (int64_t)std::distance(it0, it2);
-
-  // now check special cases
-  // first special: case var-> : will select var- because of scheme rule, but here we're c++ and we don't want the -
-
-  if (p2 < ln.size())
-    {
-    if (ln[p2] == '>' && ln[p2 - 1] == '-')
-      --p2;
-    }
 
   selection.first = p1;
   selection.second = p2 - 1;

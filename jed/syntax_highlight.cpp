@@ -58,7 +58,7 @@ namespace
     {
     keyword_data kd;
 
-    std::string in = "+ - * / = &lt; &gt; &lt;= &gt;= =&gt; abs acos and angle append apply asin assoc assq assv atan begin boolean? caar cadr call-with-current-continuation call/cc call-with-input-file call-with-output-file call-with-values car cdr cdar cddr caaar caadr cadar caddr cdaar cdadr cddar cdddr caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr case ceiling char-&gt;integer char-alphabetic? char-ci&lt;=? char-ci&lt;? char-ci=? char-ci&gt;=? char-ci&gt;? char-downcase char-lower-case? char-numeric? char-ready? char-upcase char-upper-case? char-whitespace? char&lt;=? char&lt;? char=? char&gt;=? char&gt;? char? close-input-port close-output-port complex? cond cons cos current-input-port current-output-port define define-syntax delay denominator display do dynamic-wind else eof-object? eq? equal? eqv? eval even? exact-&gt;inexact exact? exp expt floor for-each force gcd if imag-part inexact-&gt;exact inexact? input-port? integer-&gt;char integer? interaction-environment lambda lcm length let let* let-syntax letrec letrec-syntax list list-&gt;string list-&gt;vector list-ref list-tail list? load log magnitude make-polar make-rectangular make-string make-vector map max member memq memv min modulo negative? newline not null-environment null? number-&gt;string number? numerator odd? open-input-file open-output-file or output-port? pair? peek-char positive? procedure? quasiquote quote quotient rational? rationalize read read-char real-part real? remainder reverse round scheme-report-environment set! set-car! set-cdr! sin sqrt string string-&gt;list string-&gt;number string-&gt;symbol string-append string-ci&lt;=? string-ci&lt;? string-ci=? string-ci&gt;=? string-ci&gt;? string-copy string-fill! string-length string-ref string-set! string&lt;=? string&lt;? string=? string&gt;=? string&gt;? string? substring symbol-&gt;string symbol? syntax-rules transcript-off transcript-on truncate unquote unquote-splicing values vector vector-&gt;list vector-fill! vector-length vector-ref vector-set! vector? with-input-from-file with-output-to-file write write-char zero?";
+    std::string in = "+ - * / = < > <= >= => abs acos and angle append apply asin assoc assq assv atan begin boolean? caar cadr call-with-current-continuation call/cc call-with-input-file call-with-output-file call-with-values car cdr cdar cddr caaar caadr cadar caddr cdaar cdadr cddar cdddr caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr case ceiling char->integer char-alphabetic? char-ci<=? char-ci<? char-ci=? char-ci>=? char-ci>? char-downcase char-lower-case? char-numeric? char-ready? char-upcase char-upper-case? char-whitespace? char<=? char<? char=? char>=? char>? char? close-input-port close-output-port complex? cond cons cos current-input-port current-output-port define define-syntax delay denominator display do dynamic-wind else eof-object? eq? equal? eqv? eval even? exact->inexact exact? exp expt floor for-each force gcd if imag-part inexact->exact inexact? input-port? integer-char integer? interaction-environment lambda lcm length let let* let-syntax letrec letrec-syntax list list->string list->vector list-ref list-tail list? load log magnitude make-polar make-rectangular make-string make-vector map max member memq memv min modulo negative? newline not null-environment null? number->string number? numerator odd? open-input-file open-output-file or output-port? pair? peek-char positive? procedure? quasiquote quote quotient rational? rationalize read read-char real-part real? remainder reverse round scheme-report-environment set! set-car! set-cdr! sin sqrt string string->list string->number string->symbol string-append string-ci<=? string-ci<? string-ci=? string-ci>=? string-ci>? string-copy string-fill! string-length string-ref string-set! string<=? string<? string=? string>=? string>? string? substring symbol->string symbol? syntax-rules transcript-off transcript-on truncate unquote unquote-splicing values vector vector->list vector-fill! vector-length vector-ref vector-set! vector? with-input-from-file with-output-to-file write write-char zero?";
     kd.keywords_1 = break_string(in);
     std::sort(kd.keywords_1.begin(), kd.keywords_1.end());
 
@@ -251,13 +251,10 @@ namespace
     }
 
 
-  std::map<std::string, comment_data> read_map_from_json(const std::string& filename)
+  void read_syntax_from_json(std::map<std::string, comment_data>& m, std::map<std::string, keyword_data>& k, const std::string& filename)
     {
     nlohmann::json j;
-
-    std::map<std::string, comment_data> m;
-
-    /*
+    
     std::ifstream i(filename);
     if (i.is_open())
       {
@@ -271,46 +268,73 @@ namespace
           if (element.is_object())
             {
             comment_data cd;
+            keyword_data kd;
             for (auto it = element.begin(); it != element.end(); ++it)
               {
-              if (it.key() == "multiline_begin")
+              if (it.key() == "multiline_comment_begin")
                 {
                 if (it.value().is_string())
                   cd.multiline_begin = it.value().get<std::string>();
                 }
-              if (it.key() == "multiline_end")
+              if (it.key() == "multiline_comment_end")
                 {
                 if (it.value().is_string())
                   cd.multiline_end = it.value().get<std::string>();
                 }
-              if (it.key() == "singleline")
+              if (it.key() == "singleline_comment")
                 {
                 if (it.value().is_string())
                   cd.single_line = it.value().get<std::string>();
                 }
+              if (it.key() == "multiline_string_begin")
+                {
+                if (it.value().is_string())
+                  cd.multistring_begin = it.value().get<std::string>();
+                }
+              if (it.key() == "multiline_string_end")
+                {
+                if (it.value().is_string())
+                  cd.multistring_end = it.value().get<std::string>();
+                }
+              if (it.key() == "uses_quotes_for_chars")
+                {
+                if (it.value().is_number_integer())
+                  cd.uses_quotes_for_chars = it.value().get<int>() != 0;
+                }
+              if (it.key() == "keywords_1")
+                {
+                if (it.value().is_string())
+                  kd.keywords_1 = break_string(it.value().get<std::string>());
+                }
+              if (it.key() == "keywords_2")
+                {
+                if (it.value().is_string())
+                  kd.keywords_2 = break_string(it.value().get<std::string>());
+                }
               }
-            m[ext_it.key()] = cd;
+            auto extensions = break_string(ext_it.key());
+            for (const auto& we : extensions)
+              {
+              std::string e = jtk::convert_wstring_to_string(we);
+              m[e] = cd;
+              k[e] = kd;
+              }
             }
           }
         }
       catch (nlohmann::detail::exception e)
         {
-        m = build_comment_data_hardcoded();
         }
       i.close();
       }
-    else
-    */
-    m = build_comment_data_hardcoded();
-    return m;
     }
   }
 
 syntax_highlighter::syntax_highlighter()
   {
-  //extension_to_data = read_map_from_json(get_file_in_executable_path("comments.json"));
   extension_to_data = build_comment_data_hardcoded();
   extension_to_keywords = build_keyword_data_hardcoded();
+  read_syntax_from_json(extension_to_data, extension_to_keywords, get_file_in_executable_path("syntax.json"));
   }
 
 syntax_highlighter::~syntax_highlighter()

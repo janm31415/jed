@@ -189,6 +189,8 @@ std::string get_file_path(const std::string& filename, const std::string& buffer
     {
     if (jtk::file_exists(filename))
       return filename;
+    if (jtk::is_directory(jtk::get_folder(filename)))
+      return filename;
     }
   if (!buffer_filename.empty())
     {

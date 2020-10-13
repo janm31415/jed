@@ -1568,16 +1568,11 @@ std::string get_row_indentation_pattern(file_buffer fb, position pos)
   if (pos.row >= fb.content.size())
     return out;
   auto ln = fb.content[pos.row];
-  int64_t lastcol = (int64_t)ln.size() - 1;
-  if ((pos.row + 1) == fb.content.size()) // last line
+  for (int64_t c = pos.col; c < ln.size(); ++c)
     {
-    if (fb.content.back().empty())
-      lastcol = 0;
-    else if (fb.content.back().back() != L'\n')
-      ++lastcol;
+    if (ln[c] != ' ' && ln[c] != '\n')
+      return out;
     }
-  if (pos.col != lastcol)
-    return out;
   int64_t col = 0;
   while (col < ln.size() && (ln[col] == L' ' || ln[col] == L'\t'))
     {
