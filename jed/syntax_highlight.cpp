@@ -196,7 +196,7 @@ namespace
   std::map<std::string, comment_data> build_comment_data_hardcoded()
     {
     std::map<std::string, comment_data> m;
-
+    /*
     m["c"] = make_comment_data_for_cpp();
     m["cc"] = make_comment_data_for_cpp();
     m["cpp"] = make_comment_data_for_cpp();
@@ -222,13 +222,14 @@ namespace
 
     m["m"] = make_comment_data_for_objective_c();
     m["mm"] = make_comment_data_for_objective_c();
+    */
     return m;
     }
 
   std::map<std::string, keyword_data> build_keyword_data_hardcoded()
     {
     std::map<std::string, keyword_data> m;
-
+    /*
     m["cc"] = make_keyword_data_for_cpp();
     m["cpp"] = make_keyword_data_for_cpp();
     m["h"] = make_keyword_data_for_cpp();
@@ -247,6 +248,7 @@ namespace
 
     m["m"] = make_keyword_data_for_objective_c();
     m["mm"] = make_keyword_data_for_objective_c();
+    */
     return m;
     }
 
@@ -335,6 +337,11 @@ syntax_highlighter::syntax_highlighter()
   extension_to_data = build_comment_data_hardcoded();
   extension_to_keywords = build_keyword_data_hardcoded();
   read_syntax_from_json(extension_to_data, extension_to_keywords, get_file_in_executable_path("syntax.json"));
+  for (auto& kd : extension_to_keywords)
+    {
+    std::sort(kd.second.keywords_1.begin(), kd.second.keywords_1.end());
+    std::sort(kd.second.keywords_2.begin(), kd.second.keywords_2.end());
+    }
   }
 
 syntax_highlighter::~syntax_highlighter()
