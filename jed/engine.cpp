@@ -58,10 +58,17 @@ file_buffer set_multiline_comments(file_buffer fb)
   std::transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
   const syntax_highlighter& shl = get_syntax_highlighter();
   comment_data cd;
+  fb.syntax.should_highlight = false;
   if (shl.extension_or_filename_has_syntax_highlighter(ext))
+    {
     cd = shl.get_syntax_highlighter(ext);
+    fb.syntax.should_highlight = true;
+    }
   else if (shl.extension_or_filename_has_syntax_highlighter(filename))
+    {
     cd = shl.get_syntax_highlighter(filename);
+    fb.syntax.should_highlight = true;
+    }
   fb.syntax.multiline_begin = cd.multiline_begin;
   fb.syntax.multiline_end = cd.multiline_end;
   fb.syntax.multistring_begin = cd.multistring_begin;

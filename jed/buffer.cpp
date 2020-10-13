@@ -1202,7 +1202,7 @@ file_buffer find_text(file_buffer fb, const std::string& txt)
 std::wstring read_next_word(line::const_iterator it, line::const_iterator it_end)
   {
   std::wstring out;
-  while (it != it_end && *it != L' ' && *it != L'(' && *it != L'{' && *it != L')' && *it != L'}' && *it != L'[' && *it != L']'&& *it != L'\n' && *it != L'\t' && *it != L'\r')
+  while (it != it_end && *it != L' ' && *it != L',' && *it != L'(' && *it != L'{' && *it != L')' && *it != L'}' && *it != L'[' && *it != L']'&& *it != L'\n' && *it != L'\t' && *it != L'\r')
     {
     out.push_back(*it);
     ++it;
@@ -1383,7 +1383,9 @@ std::vector<std::pair<int64_t, text_type>> get_text_type(file_buffer fb, int64_t
   {
   std::vector<std::pair<int64_t, text_type>> out;
   out.emplace_back((int64_t)0, (text_type)fb.lex[row]);
-  if (fb.syntax.single_line.empty() && fb.syntax.multiline_begin.empty() && fb.syntax.multistring_begin.empty())
+  //if (fb.syntax.single_line.empty() && fb.syntax.multiline_begin.empty() && fb.syntax.multistring_begin.empty())
+  //  return out;
+  if (!fb.syntax.should_highlight)
     return out;
 
   uint8_t current_status = fb.lex[row];
