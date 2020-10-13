@@ -531,6 +531,8 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
         {
         if (wrap)
           {
+          if (cnt == cwidth-1 && ((it+1) == it_end)) // last word done, don't make a newline
+            break;
           drawn = 0;
           ++r;
           if (r >= maxrow)
@@ -548,7 +550,6 @@ int draw_line(int& wide_characters_offset, file_buffer fb, position& current, po
     if (wrap && r >= maxrow)
       break;
     }
-
   attroff(A_UNDERLINE | A_ITALIC);
 
   if (!in_selection(fb, current, cursor, buffer_pos, start_selection, rectangular, senv))
@@ -1014,7 +1015,9 @@ app_state check_scroll_position(app_state state, const settings& s)
         if (actual_rows >= rows)
           break;
         }
-      int64_t my_row = wrapped_line_rows(state.buffer.content[state.buffer.pos.row], cols, rows, senv);
+      int64_t my_row = 0;
+      if (state.buffer.pos.row < state.buffer.content.size())
+        my_row = wrapped_line_rows(state.buffer.content[state.buffer.pos.row], cols, rows, senv);
       if (state.scroll_row + r < state.buffer.pos.row + my_row - 1)
         {
         state.scroll_row = state.buffer.pos.row;
@@ -2106,11 +2109,44 @@ std::optional<app_state> move_editor_window_up_down(app_state state, int steps, 
   int64_t lastrow = (int64_t)state.buffer.content.size() - 1;
   if (lastrow < 0)
     lastrow = 0;
-
-  if (state.scroll_row + rows > lastrow + 1)
-    state.scroll_row = lastrow - rows + 1;
   if (state.scroll_row < 0)
     state.scroll_row = 0;
+  if (s.wrap)
+    {
+    auto senv = convert(s);
+    int64_t actual_rows = 0;
+    int r = 0;
+    for (; r < rows; ++r)
+      {
+      if (state.scroll_row + r >= state.buffer.content.size())
+        break;
+      actual_rows += wrapped_line_rows(state.buffer.content[state.scroll_row + r], cols, rows, senv);
+      if (actual_rows >= rows)
+        break;
+      }
+    if (state.scroll_row + r > lastrow)
+      {
+      int64_t my_row = wrapped_line_rows(state.buffer.content[lastrow], cols, rows, senv);
+      state.scroll_row = lastrow;
+      r = 0;
+      actual_rows = my_row;
+      for (; r < rows; ++r)
+        {
+        actual_rows += wrapped_line_rows(state.buffer.content[state.scroll_row - 1], cols, rows, senv);
+        if (actual_rows <= rows)
+          --state.scroll_row;
+        else
+          break;
+        if (state.scroll_row == 0)
+          break;
+        }
+      }
+    }
+  else
+    {
+    if (state.scroll_row + rows > lastrow + 1)
+      state.scroll_row = lastrow - rows + 1;
+    }
   return state;
   }
 
