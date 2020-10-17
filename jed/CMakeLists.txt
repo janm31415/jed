@@ -23,7 +23,6 @@ if (APPLE)
 endif (APPLE)
 
 set(HDRS
-active_folder.h
 buffer.h
 clipboard.h
 colors.h
@@ -32,9 +31,7 @@ jedicon.h
 keyboard.h
 mouse.h
 pdcex.h
-pipe.h
 pref_file.h
-process.h
 settings.h
 syntax_highlight.h
 utils.h

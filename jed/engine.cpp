@@ -1,16 +1,14 @@
 #include "engine.h"
-#include "active_folder.h"
 #include "clipboard.h"
 #include "colors.h"
 #include "keyboard.h"
 #include "mouse.h"
 #include "pdcex.h"
-#include "pipe.h"
-#include "process.h"
 #include "syntax_highlight.h"
 #include "utils.h"
 
 #include <jtk/file_utils.h>
+#include <jtk/pipe.h>
 
 #include <map>
 #include <functional>
@@ -1571,9 +1569,9 @@ app_state ret_editor(app_state state, const settings& s)
     std::string cmd = jtk::convert_wstring_to_string(wcmd);
     cmd.push_back('\n');
 #ifdef _WIN32
-    send_to_pipe(state.process, cmd.c_str());
+    jtk::send_to_pipe(state.process, cmd.c_str());
 #else
-    send_to_pipe(state.process.data(), cmd.c_str());
+    jtk::send_to_pipe(state.process.data(), cmd.c_str());
 #endif
     state.buffer.pos = get_last_position(state.buffer);
     state.buffer = insert(state.buffer, "\n", convert(s));
@@ -2041,7 +2039,7 @@ std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings&
   std::string pbcopy = get_file_path("xclip", "");
 #endif  
   char** argv = alloc_arguments(pbcopy, std::vector<std::string>());
-  int err = create_pipe(pbcopy.c_str(), argv, nullptr, pipefd);
+  int err = jtk::create_pipe(pbcopy.c_str(), argv, nullptr, pipefd);
   free_arguments(argv);
   if (err != 0)
     {
@@ -2049,8 +2047,8 @@ std::optional<app_state> command_copy_to_snarf_buffer(app_state state, settings&
     state.message = string_to_line(error_message);
     return state;
     }
-  send_to_pipe(pipefd, txt.c_str());
-  close_pipe(pipefd);
+  jtk::send_to_pipe(pipefd, txt.c_str());
+  jtk::close_pipe(pipefd);
 #endif
   return state;
   }
@@ -2263,14 +2261,14 @@ std::optional<app_state> command_kill(app_state state, settings& s)
 #ifdef _WIN32
   if (state.wt == wt_piped)
     {
-    destroy_pipe(state.process, 9);
+    jtk::destroy_pipe(state.process, 9);
     state.process = nullptr;
     state.wt = wt_normal;
     }
 #else
   if (state.wt == wt_piped)
     {
-    destroy_pipe(state.process.data(), 9);
+    jtk::destroy_pipe(state.process.data(), 9);
     state.process[0] = state.process[1] = state.process[2] = -1;
     state.wt = wt_normal;
     }
@@ -2603,7 +2601,7 @@ void free_arguments(char** argv)
 
 app_state execute_external(app_state state, const std::string& file_path, const std::vector<std::string>& parameters)
   {
-  active_folder af(jtk::get_folder(state.buffer.name).c_str());
+  jtk::active_folder af(jtk::get_folder(state.buffer.name).c_str());
 
   char** argv = alloc_arguments(file_path, parameters);
 #ifdef _WIN32
@@ -2611,7 +2609,7 @@ app_state execute_external(app_state state, const std::string& file_path, const 
 #else
   pid_t process;
 #endif
-  int err = run_process(file_path.c_str(), argv, nullptr, &process);
+  int err = jtk::run_process(file_path.c_str(), argv, nullptr, &process);
   free_arguments(argv);
   if (err != 0)
     {
@@ -2619,18 +2617,18 @@ app_state execute_external(app_state state, const std::string& file_path, const 
     state.message = string_to_line(error_message);
     return state;
     }
-  destroy_process(process, 0);
+  jtk::destroy_process(process, 0);
   return state;
   }
 
 app_state execute_external_input(app_state state, const std::string& file_path, const std::vector<std::string>& parameters, const settings& s)
   {
-  active_folder af(jtk::get_folder(state.buffer.name).c_str());
+  jtk::active_folder af(jtk::get_folder(state.buffer.name).c_str());
 
   char** argv = alloc_arguments(file_path, parameters);
 #ifdef _WIN32
   void* process = nullptr;
-  int err = create_pipe(file_path.c_str(), argv, nullptr, &process);
+  int err = jtk::create_pipe(file_path.c_str(), argv, nullptr, &process);
   free_arguments(argv);
   if (err != 0)
     {
@@ -2638,10 +2636,10 @@ app_state execute_external_input(app_state state, const std::string& file_path, 
     state.message = string_to_line(error_message);
     return state;
     }
-  std::string text = read_from_pipe(process, 100);
+  std::string text = jtk::read_from_pipe(process, 100);
 #else
   int pipefd[3];
-  int err = create_pipe(file_path.c_str(), argv, nullptr, pipefd);
+  int err = jtk::create_pipe(file_path.c_str(), argv, nullptr, pipefd);
   free_arguments(argv);
   if (err != 0)
     {
@@ -2649,15 +2647,15 @@ app_state execute_external_input(app_state state, const std::string& file_path, 
     state.message = string_to_line(error_message);
     return state;
     }
-  std::string text = read_from_pipe(pipefd, 100);
+  std::string text = jtk::read_from_pipe(pipefd, 100);
 #endif
 
   state.buffer = insert(state.buffer, text, convert(s));
 
 #ifdef _WIN32        
-  close_pipe(process);
+  jtk::close_pipe(process);
 #else
-  close_pipe(pipefd);
+  jtk::close_pipe(pipefd);
 #endif
   return state;
   }
@@ -2670,12 +2668,12 @@ app_state execute_external_output(app_state state, const std::string& file_path,
     woutput.push_back('\n');
   auto output = jtk::convert_wstring_to_string(woutput);
 
-  active_folder af(jtk::get_folder(state.buffer.name).c_str());
+  jtk::active_folder af(jtk::get_folder(state.buffer.name).c_str());
 
   char** argv = alloc_arguments(file_path, parameters);
 #ifdef _WIN32
   void* process = nullptr;
-  int err = create_pipe(file_path.c_str(), argv, nullptr, &process);
+  int err = jtk::create_pipe(file_path.c_str(), argv, nullptr, &process);
   free_arguments(argv);
   if (err != 0)
     {
@@ -2683,16 +2681,16 @@ app_state execute_external_output(app_state state, const std::string& file_path,
     state.message = string_to_line(error_message);
     return state;
     }
-  int res = send_to_pipe(process, output.c_str());
+  int res = jtk::send_to_pipe(process, output.c_str());
   if (res != NO_ERROR)
     {
     state.message = string_to_line(std::string("Error writing to external process"));
     return state;
     }
-  close_pipe(process);
+  jtk::close_pipe(process);
 #else
   int pipefd[3];
-  int err = create_pipe(file_path.c_str(), argv, nullptr, pipefd);
+  int err = jtk::create_pipe(file_path.c_str(), argv, nullptr, pipefd);
   free_arguments(argv);
   if (err != 0)
     {
@@ -2700,8 +2698,8 @@ app_state execute_external_output(app_state state, const std::string& file_path,
     state.message = string_to_line(error_message);
     return state;
     }
-  send_to_pipe(pipefd, output.c_str());
-  close_pipe(pipefd);
+  jtk::send_to_pipe(pipefd, output.c_str());
+  jtk::close_pipe(pipefd);
 #endif
 
   return state;
@@ -2716,12 +2714,12 @@ app_state execute_external_input_output(app_state state, const std::string& file
     woutput.push_back('\n');
   auto output = jtk::convert_wstring_to_string(woutput);
 
-  active_folder af(jtk::get_folder(state.buffer.name).c_str());
+  jtk::active_folder af(jtk::get_folder(state.buffer.name).c_str());
 
   char** argv = alloc_arguments(file_path, parameters);
 #ifdef _WIN32
   void* process = nullptr;
-  int err = create_pipe(file_path.c_str(), argv, nullptr, &process);
+  int err = jtk::create_pipe(file_path.c_str(), argv, nullptr, &process);
   free_arguments(argv);
   if (err != 0)
     {
@@ -2729,16 +2727,16 @@ app_state execute_external_input_output(app_state state, const std::string& file
     state.message = string_to_line(error_message);
     return state;
     }
-  int res = send_to_pipe(process, output.c_str());
+  int res = jtk::send_to_pipe(process, output.c_str());
   if (res != NO_ERROR)
     {
     state.message = string_to_line(std::string("Error writing to external process"));
     return state;
     }
-  std::string text = read_from_pipe(process, 100);
+  std::string text = jtk::read_from_pipe(process, 100);
 #else
   int pipefd[3];
-  int err = create_pipe(file_path.c_str(), argv, nullptr, pipefd);
+  int err = jtk::create_pipe(file_path.c_str(), argv, nullptr, pipefd);
   free_arguments(argv);
   if (err != 0)
     {
@@ -2746,16 +2744,16 @@ app_state execute_external_input_output(app_state state, const std::string& file
     state.message = string_to_line(error_message);
     return state;
     }
-  send_to_pipe(pipefd, output.c_str());
+  jtk::send_to_pipe(pipefd, output.c_str());
   std::string text = read_from_pipe(pipefd, 100);
 #endif
 
   state.buffer = insert(state.buffer, text, convert(s));
 
 #ifdef _WIN32        
-  close_pipe(process);
+  jtk::close_pipe(process);
 #else
-  close_pipe(pipefd);
+  jtk::close_pipe(pipefd);
 #endif
   return state;
   }
@@ -3377,7 +3375,7 @@ app_state start_pipe(app_state state, const std::string& inputfile, const std::v
   char** argv = alloc_arguments(inputfile, parameters);
 #ifdef _WIN32
   state.process = nullptr;
-  int err = create_pipe(inputfile.c_str(), argv, nullptr, &state.process);
+  int err = jtk::create_pipe(inputfile.c_str(), argv, nullptr, &state.process);
   free_arguments(argv);
   if (err != 0)
     {
@@ -3386,9 +3384,9 @@ app_state start_pipe(app_state state, const std::string& inputfile, const std::v
     state.wt = wt_normal;
     return state;
     }
-  std::string text = read_from_pipe(state.process, 100);
+  std::string text = jtk::read_from_pipe(state.process, 100);
 #else
-  int err = create_pipe(inputfile.c_str(), argv, nullptr, state.process.data());
+  int err = jtk::create_pipe(inputfile.c_str(), argv, nullptr, state.process.data());
   free_arguments(argv);
   if (err != 0)
     {
@@ -3397,7 +3395,7 @@ app_state start_pipe(app_state state, const std::string& inputfile, const std::v
     state.wt = wt_normal;
     return state;
     }
-  std::string text = read_from_pipe(state.process.data(), 100);
+  std::string text = jtk::read_from_pipe(state.process.data(), 100);
 #endif
 
   state.buffer = insert(state.buffer, text, convert(s));
@@ -3424,9 +3422,9 @@ app_state check_pipes(bool& modifications, app_state state, const settings& s)
   if (state.wt != wt_piped)
     return state;
 #ifdef _WIN32
-  std::string text = read_from_pipe(state.process, 10);
+  std::string text = jtk::read_from_pipe(state.process, 10);
 #else
-  std::string text = read_from_pipe(state.process.data(), 10);
+  std::string text = jtk::read_from_pipe(state.process.data(), 10);
 #endif
   if (text.empty())
     return state;
