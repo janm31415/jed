@@ -2745,7 +2745,7 @@ app_state execute_external_input_output(app_state state, const std::string& file
     return state;
     }
   jtk::send_to_pipe(pipefd, output.c_str());
-  std::string text = read_from_pipe(pipefd, 100);
+  std::string text = jtk::read_from_pipe(pipefd, 100);
 #endif
 
   state.buffer = insert(state.buffer, text, convert(s));
