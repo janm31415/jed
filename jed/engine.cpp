@@ -1030,12 +1030,12 @@ app_state check_scroll_position(app_state state, const settings& s)
         actual_rows = my_row;
         for (; r < rows; ++r)
           {
+          if (state.scroll_row == 0)
+            break;
           actual_rows += wrapped_line_rows(state.buffer.content[state.scroll_row - 1], cols, rows, senv);
           if (actual_rows <= rows)
             --state.scroll_row;
           else
-            break;
-          if (state.scroll_row == 0)
             break;
           }
         }
@@ -2140,12 +2140,12 @@ std::optional<app_state> move_editor_window_up_down(app_state state, int steps, 
       actual_rows = my_row;
       for (; r < rows; ++r)
         {
+        if (state.scroll_row == 0)
+          break;
         actual_rows += wrapped_line_rows(state.buffer.content[state.scroll_row - 1], cols, rows, senv);
         if (actual_rows <= rows)
           --state.scroll_row;
         else
-          break;
-        if (state.scroll_row == 0)
           break;
         }
       }
