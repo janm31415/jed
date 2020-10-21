@@ -577,8 +577,9 @@ std::string get_operation_text(e_operation op)
   {
   switch (op)
     {
-    case op_find: return std::string("Find: ");
+    case op_find: return std::string("Find: ");    
     case op_replace: return std::string("Replace: ");
+    case op_replace_find: return std::string("Find:  ");
     case op_goto: return std::string("Go to line: ");
     case op_open: return std::string("Open file: ");
     case op_save: return std::string("Save file: ");
@@ -628,9 +629,14 @@ void draw_help_text(app_state state)
     static std::string line1("^X Cancel");
     draw_help_line(line1, rows - 2, cols);
     }
+  if (state.operation == op_replace_find)
+    {
+    static std::string line1("^X Cancel");
+    draw_help_line(line1, rows - 2, cols);
+    }
   if (state.operation == op_replace)
     {
-    static std::string line1("^X Cancel ^A All");
+    static std::string line1("^X Cancel ^A All    ^S Select");
     draw_help_line(line1, rows - 2, cols);
     }
   if (state.operation == op_goto)
@@ -1748,6 +1754,7 @@ app_state replace(app_state state, settings& s)
   state.message = string_to_line("[Replace]");
   state.operation = op_editing;
   std::wstring replace_string;
+  state.buffer = find_text(state.buffer, s.last_find);
   state.buffer = erase_right(state.buffer, senv, true);
   if (!state.operation_buffer.content.empty())
     replace_string = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
@@ -1781,6 +1788,49 @@ app_state replace_all(app_state state, settings& s)
     state.buffer = find_text(state.buffer, find_string);
     }
   return check_scroll_position(state, s);
+  }
+
+app_state replace_selection(app_state state, settings& s)
+  {
+  state.message = string_to_line("[Replace selection]");
+  state.operation = op_editing;
+  std::wstring replace_string;
+  if (!state.operation_buffer.content.empty())
+    replace_string = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
+  s.last_replace = jtk::convert_wstring_to_string(replace_string);
+  std::wstring find_string = jtk::convert_string_to_wstring(s.last_find);
+  
+  if (!state.buffer.start_selection)
+    return state;
+
+  position start_pos = state.buffer.pos;
+  position end_pos = *state.buffer.start_selection;
+  if (end_pos < start_pos)
+    std::swap(start_pos, end_pos);
+
+  state.buffer.pos = start_pos;
+  state.buffer = find_text(state.buffer, find_string);
+  if (state.buffer.pos == get_last_position(state.buffer))
+    return state;
+  state.buffer = push_undo(state.buffer);
+  auto senv = convert(s);
+
+  while (state.buffer.pos <= end_pos)
+    {
+    state.buffer = erase_right(state.buffer, senv, false);
+    state.buffer = insert(state.buffer, replace_string, senv, false);
+    state.buffer = find_text(state.buffer, find_string);
+    }
+  return check_scroll_position(state, s);
+  }
+
+app_state replace_find(app_state state, settings& s)
+  {
+  std::wstring search_string;
+  if (!state.operation_buffer.content.empty())
+    search_string = std::wstring(state.operation_buffer.content[0].begin(), state.operation_buffer.content[0].end());
+  s.last_find = jtk::convert_wstring_to_string(search_string);
+  return state;
   }
 
 app_state make_replace_buffer(app_state state, const settings& s)
@@ -1851,7 +1901,8 @@ std::optional<app_state> ret_operation(app_state state, settings& s)
       case op_open: state = open_file(state, s); break;
       case op_save: state = save_file(state); break;
       case op_query_save: state = save_file(state); break;
-      case op_from_find_to_replace: state = make_replace_buffer(state, s); break;
+      case op_replace_find: state = replace_find(state, s); break;
+      case op_replace_to_find: state = make_replace_buffer(state, s); break;
       case op_replace: state = replace(state, s); break;
       case op_new: state = make_new_buffer(state, s); break;
       case op_get: state = get(state); break;
@@ -2307,8 +2358,8 @@ std::optional<app_state> command_find(app_state state, settings& s)
 
 std::optional<app_state> command_replace(app_state state, settings& s)
   {
-  state.operation = op_find;
-  state.operation_stack.push_back(op_from_find_to_replace);
+  state.operation = op_replace_find;
+  state.operation_stack.push_back(op_replace_to_find);
   return make_find_buffer(state, s);
   }
 
@@ -3670,7 +3721,11 @@ std::optional<app_state> process_input(app_state state, settings& s)
           {
           if (ctrl_pressed())
             {
-            return command_save(state, s);
+            switch (state.operation)
+              {
+              case op_replace: return replace_selection(state, s);
+              default: return command_save(state, s);
+              }
             }
           break;
           }
