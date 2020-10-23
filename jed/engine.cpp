@@ -578,6 +578,7 @@ std::string get_operation_text(e_operation op)
   switch (op)
     {
     case op_find: return std::string("Find: ");    
+    case op_incremental_search: return std::string("Incremental search: ");
     case op_replace: return std::string("Replace: ");
     case op_replace_find: return std::string("Find:  ");
     case op_goto: return std::string("Go to line: ");
@@ -620,11 +621,16 @@ void draw_help_text(app_state state)
   if (state.operation == op_editing || state.operation == op_command_editing)
     {
     static std::string line1("^N New    ^O Open   ^S Put    ^W Save   ^C Copy   ^V Paste  ^Z Undo   ^Y Redo");
-    static std::string line2("F1 Help   ^X Exit   ^F Find   ^G Goto   ^H Replace^A Sel/all");
+    static std::string line2("F1 Help   ^X Exit   ^F Find   ^G Goto   ^H Replace^A Sel/all^I Incr");
     draw_help_line(line1, rows - 2, cols);
     draw_help_line(line2, rows - 1, cols - 1); // cols - 1 because we need to avoid that the last character is drawn: pdcurses will do a \n, causing our layout to be messed up
     }
   if (state.operation == op_find)
+    {
+    static std::string line1("^X Cancel");
+    draw_help_line(line1, rows - 2, cols);
+    }
+  if (state.operation == op_incremental_search)
     {
     static std::string line1("^X Cancel");
     draw_help_line(line1, rows - 2, cols);
@@ -1413,14 +1419,25 @@ app_state text_input_command(app_state state, const char* txt, const settings& s
   return check_command_scroll_position(state, s);
   }
 
-app_state text_input_operation(app_state state, const char* txt, const settings& s)
+app_state text_input_operation(app_state state, const char* txt, settings& s)
   {
   std::string t(txt);
   state.operation_buffer = insert(state.operation_buffer, t, convert(s));
+  if (state.operation == op_incremental_search)
+    {
+    if (state.buffer.start_selection != std::nullopt && *state.buffer.start_selection < state.buffer.pos)
+      {
+      state.buffer.pos = *state.buffer.start_selection;
+      }
+    state.buffer.start_selection = std::nullopt;
+    state.buffer = find_text(state.buffer, state.operation_buffer.content);
+    s.last_find = to_string(state.operation_buffer.content);
+    state = check_scroll_position(state, s);    
+    }
   return check_operation_buffer(state);
   }
 
-app_state text_input(app_state state, const char* txt, const settings& s)
+app_state text_input(app_state state, const char* txt, settings& s)
   {
   if (state.operation == op_editing)
     return text_input_editor(state, txt, s);
@@ -1560,7 +1577,7 @@ app_state del(app_state state, const settings& s)
     return del_operation(state, s);
   }
 
-app_state ret_editor(app_state state, const settings& s)
+app_state ret_editor(app_state state, settings& s)
   {
   if (state.wt == wt_piped && state.buffer.pos.row == (int64_t)state.buffer.content.size() - 1)
     {
@@ -1593,7 +1610,7 @@ app_state ret_editor(app_state state, const settings& s)
     }
   }
 
-app_state ret_command(app_state state, const settings& s)
+app_state ret_command(app_state state, settings& s)
   {
   std::string indentation("\n");
   indentation.append(get_row_indentation_pattern(state.command_buffer, state.command_buffer.pos));
@@ -1889,6 +1906,13 @@ app_state gotoline(app_state state, const settings& s)
   return check_scroll_position(state, s);
   }
 
+app_state finish_incremental_search(app_state state)
+  {
+  state.operation = op_editing;
+  state.message = string_to_line("[Incremental search]");
+  return state;
+  }
+
 std::optional<app_state> ret_operation(app_state state, settings& s)
   {
   bool done = false;
@@ -1899,6 +1923,7 @@ std::optional<app_state> ret_operation(app_state state, settings& s)
       case op_find: state = find(state, s); break;
       case op_goto: state = gotoline(state, s); break;
       case op_open: state = open_file(state, s); break;
+      case op_incremental_search: state = finish_incremental_search(state);  break;
       case op_save: state = save_file(state); break;
       case op_query_save: state = save_file(state); break;
       case op_replace_find: state = replace_find(state, s); break;
@@ -1956,8 +1981,17 @@ std::optional<app_state> make_save_buffer(app_state state, const settings& s)
 
 std::optional<app_state> make_find_buffer(app_state state, settings& s)
   {
+  auto senv = convert(s);
+  std::string find_text = s.last_find;
+  if (has_selection(state.buffer))
+    {
+    std::string line = to_string(get_selection(state.buffer, senv));
+    auto pos = line.find('\n');
+    if (pos == std::string::npos)
+      find_text = line;
+    }
   state = clear_operation_buffer(state);
-  state.operation_buffer = insert(state.operation_buffer, s.last_find, convert(s), false);
+  state.operation_buffer = insert(state.operation_buffer, find_text, senv, false);
   state.operation_buffer.start_selection = position(0, 0);
   state.operation_buffer = move_end(state.operation_buffer, convert(s));
   return state;
@@ -2363,10 +2397,35 @@ std::optional<app_state> command_replace(app_state state, settings& s)
   return make_find_buffer(state, s);
   }
 
+std::optional<app_state> command_incremental_search(app_state state, settings& s)
+  {
+  state.operation = op_incremental_search;
+  state = clear_operation_buffer(state); 
+  return state;
+  }
+
 std::optional<app_state> command_goto(app_state state, settings& s)
   {
   state.operation = op_goto;
   return make_goto_buffer(state, s);
+  }
+
+std::optional<app_state> command_all(app_state state, settings& s)
+  {
+  switch (state.operation)
+    {
+    case op_replace: return replace_all(state, s);    
+    default: return state;
+    }
+  }
+
+std::optional<app_state> command_select(app_state state, settings& s)
+  {
+  switch (state.operation)
+    {
+    case op_replace: return replace_selection(state, s);
+    default: return state;
+    }
   }
 
 std::optional<app_state> command_yes(app_state state, settings& s)
@@ -2568,7 +2627,8 @@ std::optional<app_state> command_piped_win(app_state state, std::wstring& parame
 
 const auto executable_commands = std::map<std::wstring, std::function<std::optional<app_state>(app_state, settings&)>>
   {
-  {L"AcmeTheme", command_acme_theme},
+  {L"AcmeTheme", command_acme_theme},  
+  {L"All", command_all},
   {L"AllChars", command_show_all_characters},
   {L"Back", command_cancel},
   {L"Cancel", command_cancel},
@@ -2579,6 +2639,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Get", command_get},
   {L"Goto", command_goto},
   {L"Help", command_help},
+  {L"Incr", command_incremental_search},
   {L"Kill", command_kill},
   {L"LightTheme", command_light_theme},
   {L"LineNumbers", command_line_numbers},
@@ -2591,6 +2652,7 @@ const auto executable_commands = std::map<std::wstring, std::function<std::optio
   {L"Redo", command_redo},
   {L"Replace", command_replace},
   {L"Save", command_save_as},
+  {L"Select", command_select},
   {L"Sel/all", command_select_all},
   {L"TabSpaces", command_tab_spaces},
   {L"Undo", command_undo},
@@ -3691,6 +3753,14 @@ std::optional<app_state> process_input(app_state state, settings& s)
           if (ctrl_pressed())
             {
             return command_replace(state, s);
+            }
+          break;
+          }
+          case SDLK_i:
+          {
+          if (ctrl_pressed())
+            {
+            return command_incremental_search(state, s);
             }
           break;
           }

@@ -57,10 +57,16 @@ int main(int argc, char** argv)
   s = read_settings(get_file_in_executable_path("jed_settings.json").c_str());
   update_settings(s, get_file_in_executable_path("jed_user_settings.json").c_str());
 
+
+
   engine e(argc, argv, s);
   e.run();
 
-  write_settings(e.s, get_file_in_executable_path("jed_settings.json").c_str());
+  settings s_latest = read_settings(get_file_in_executable_path("jed_settings.json").c_str());
+  update_settings(s_latest, get_file_in_executable_path("jed_user_settings.json").c_str());
+
+  update_settings_if_different(s_latest, e.s, s);
+  write_settings(s_latest, get_file_in_executable_path("jed_settings.json").c_str());
 
   endwin();
 

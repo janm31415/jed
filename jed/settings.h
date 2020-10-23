@@ -40,6 +40,7 @@ struct settings
   uint32_t color_keyword_2;
   };
 
+void update_settings_if_different(settings& s, const settings& new_settings, const settings& old_settings);
 void update_settings(settings& s, const char* filename);
 settings read_settings(const char* filename);
 void write_settings(const settings& s, const char* filename);

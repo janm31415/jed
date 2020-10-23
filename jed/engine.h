@@ -14,6 +14,7 @@ enum e_operation
   op_find,
   op_goto,
   op_get,
+  op_incremental_search,
   op_open,
   op_replace,
   op_replace_find,
