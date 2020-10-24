@@ -110,6 +110,7 @@ The following commands/shortcuts are currently available in Jed (^ stands for Ct
     Get, F5        : refresh the current file or folder
     Goto , ^g      : go to line
     Help, F1       : show this help text
+    Incr, ^i       : incremental search
     Kill           : kill the current running piped process if any 
                      (cfr. Win command)
     LightTheme     : change the color code to light
