@@ -104,6 +104,7 @@ The following commands/shortcuts are currently available in Jed (^ stands for Ct
     AcmeTheme      : change the color code to the color scheme of Acme
     AllChars       : toggle printing of all characters
     Cancel, ^x     : cancel the current operation
+    Copy, ^c       : copy to the clipboard (pbcopy on MacOs, xclip on Linux)
     DarkTheme      : change the color code to dark
     Exit, ^x       : exit jed
     Find , ^f      : find a word
