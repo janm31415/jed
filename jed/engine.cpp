@@ -3365,11 +3365,14 @@ std::optional<app_state> left_mouse_button_up(app_state state, int x, int y, con
   {
   if (!mouse.left_button_down) // we come from a double click
     return state;
+
+  bool was_dragging = mouse.left_dragging;
+
   mouse.left_dragging = false;
   mouse.left_button_down = false;
 
   auto p = get_ex(y, x);
-  if (p.type == SET_SCROLLBAR_EDITOR)
+  if (p.type == SET_SCROLLBAR_EDITOR && !was_dragging)
     {
     int offsetx, offsety, cols, rows;
     get_editor_window_offset(offsetx, offsety, state.scroll_row, s);
