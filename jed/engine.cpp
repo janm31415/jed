@@ -2010,6 +2010,7 @@ std::optional<app_state> make_goto_buffer(app_state state, const settings& s)
 
 std::optional<app_state> command_new(app_state state, settings& s)
   {
+  /*
   if (is_modified(state))
     {
     state.operation = op_query_save;
@@ -2017,6 +2018,14 @@ std::optional<app_state> command_new(app_state state, settings& s)
     return make_save_buffer(state, s);
     }
   return make_new_buffer(state, s);
+  */
+  write_settings(s, get_file_in_executable_path("jed_settings.json").c_str());
+  std::string exepath = jtk::get_executable_path();
+  exepath.insert(exepath.begin(), '"');
+  exepath.push_back('"');
+  exepath.push_back(' ');
+  exepath.append(std::string("-new"));  
+  return execute(state, jtk::convert_string_to_wstring(exepath), s);
   }
 
 std::optional<app_state> command_exit(app_state state, settings& s)
@@ -3999,6 +4008,8 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 
   state.wt = wt_normal;
 
+  bool new_buffer = false;
+
   //if (argc > 1)
   for (int j = 1; j < argc; ++j)
     {
@@ -4006,6 +4017,10 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
 
     if (input[0] == '-') // option
       {
+      if (input == "-new")
+        {
+        new_buffer = true;
+        }
       continue;
       }
     if (input[0] == '=') // piped
@@ -4054,14 +4069,21 @@ engine::engine(int argc, char** argv, const settings& input_settings) : s(input_
     }
   if (state.buffer.name.empty())
     {
-    if (!s.startup_folder.empty())
-      state.buffer = read_from_file(s.startup_folder);
+    if (new_buffer)
+      {
+      state = make_new_buffer(state, s);
+      }
     else
       {
-      std::string cwd = jtk::get_cwd();
-      if (!cwd.empty() && cwd.back() != '/')
-        cwd.push_back('/');
-      state.buffer = read_from_file(cwd);
+      if (!s.startup_folder.empty())
+        state.buffer = read_from_file(s.startup_folder);
+      else
+        {
+        std::string cwd = jtk::get_cwd();
+        if (!cwd.empty() && cwd.back() != '/')
+          cwd.push_back('/');
+        state.buffer = read_from_file(cwd);
+        }
       }
     }
   state.buffer = set_multiline_comments(state.buffer);
