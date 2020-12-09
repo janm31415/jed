@@ -3855,6 +3855,12 @@ std::optional<app_state> process_input(app_state state, settings& s)
             }
           break;
           }
+          case SDLK_ESCAPE:
+          {
+          if (state.operation != op_editing && state.operation != op_command_editing)
+            return command_cancel(state, s);
+          break;
+          }
           } // switch (event.key.keysym.sym)
         break;
         } // case SDL_KEYDOWN:

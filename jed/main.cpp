@@ -36,7 +36,7 @@ int main(int argc, char** argv)
   /* Initialize PDCurses */
 
   {
-  uint32_t rmask = 0x000000ff;
+    uint32_t rmask = 0x000000ff;
   uint32_t gmask = 0x0000ff00;
   uint32_t bmask = 0x00ff0000;
 
