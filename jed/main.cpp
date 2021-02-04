@@ -8,6 +8,9 @@
 #define JTK_FILE_UTILS_IMPLEMENTATION
 #include "jtk/file_utils.h"
 
+#define JTK_PIPE_IMPLEMENTATION
+#include "jtk/pipe.h"
+
 #include "engine.h"
 #include "jedicon.h"
 #include "utils.h"
