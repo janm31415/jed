@@ -5,6 +5,9 @@
 #include <iostream>
 #include <stdlib.h>
 
+#define JTK_FILE_UTILS_IMPLEMENTATION
+#include "jtk/file_utils.h"
+
 #include "engine.h"
 #include "jedicon.h"
 #include "utils.h"
